@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HermesPush 智能数据推送平台 · 交互原型 v1.0</title>
+<style>
+:root{
+  --primary:#3b6ef6; --primary-l:#ecf1fe; --success:#2ba471; --success-l:#e8f6f0;
+  --warn:#d97706; --warn-l:#fdf3e3; --danger:#dc3545; --danger-l:#fdecee;
+  --text:#1f2733; --text-2:#5e6b7f; --text-3:#96a1b3; --border:#e3e8f0; --bg:#f4f6fa;
+  --side:#1e2a3a; --side-2:#27384d; --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+#app{display:flex;min-height:100vh}
+/* ===== sidebar ===== */
+#sidebar{width:220px;background:var(--side);color:#c6d0dd;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{display:flex;align-items:center;gap:10px;padding:18px 20px;color:#fff;font-size:17px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.08)}
+.logo .mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#7aa5ff);display:flex;align-items:center;justify-content:center;font-size:16px}
+.nav-group{padding:12px 0 4px 20px;font-size:12px;color:#6b7a8d;letter-spacing:1px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;border-left:3px solid transparent;font-size:14px}
+.nav-item:hover{background:var(--side-2);color:#fff}
+.nav-item.active{background:var(--side-2);color:#fff;border-left-color:var(--primary)}
+.nav-item .ico{width:18px;text-align:center}
+/* ===== main ===== */
+#main{flex:1;min-width:0;display:flex;flex-direction:column}
+#topbar{height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+#topbar .crumb{color:var(--text-2)}
+#topbar .crumb b{color:var(--text);font-weight:600}
+.top-right{display:flex;align-items:center;gap:16px}
+.env-tag{background:var(--warn-l);color:var(--warn);padding:3px 10px;border-radius:20px;font-size:12px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer}
+#content{padding:20px 24px;flex:1}
+/* ===== common ===== */
+.page-title{font-size:18px;font-weight:600;margin-bottom:4px}
+.page-sub{color:var(--text-2);margin-bottom:16px;font-size:13px}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.card-title{font-weight:600;font-size:15px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.grid{display:grid;gap:16px}
+.grid.c2{grid-template-columns:1fr 1fr}.grid.c3{grid-template-columns:1fr 1fr 1fr}
+.grid.side{grid-template-columns:2fr 1fr}
+table.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;color:var(--text-2);font-weight:500;font-size:12.5px;padding:9px 10px;border-bottom:1px solid var(--border);background:#fafbfd;white-space:nowrap}
+.tbl td{padding:10px;border-bottom:1px solid #f0f3f8;vertical-align:middle}
+.tbl tr:hover td{background:#f8faff}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;white-space:nowrap}
+.b-run{background:var(--primary-l);color:var(--primary)} .b-ok{background:var(--success-l);color:var(--success)}
+.b-fail{background:var(--danger-l);color:var(--danger)} .b-warn{background:var(--warn-l);color:var(--warn)}
+.b-gray{background:#eef1f6;color:var(--text-2)} .b-part{background:#f3ecfd;color:#7c3aed}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--text);cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--primary);color:var(--primary)}
+.btn.pri{background:var(--primary);border-color:var(--primary);color:#fff}.btn.pri:hover{opacity:.88;color:#fff}
+.btn.danger{color:var(--danger);border-color:#f3c1c6}.btn.danger:hover{background:var(--danger-l)}
+.btn.sm{padding:4px 10px;font-size:12.5px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.lnk{color:var(--primary);cursor:pointer;font-size:13px}.lnk:hover{text-decoration:underline}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.inp,select.inp,textarea.inp{border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;background:#fff;color:var(--text);outline:none;font-family:inherit}
+.inp:focus{border-color:var(--primary)}
+textarea.inp{width:100%;resize:vertical}
+label.fl{display:block;font-size:13px;color:var(--text-2);margin:12px 0 5px}
+label.fl .req{color:var(--danger)}
+.hint{font-size:12px;color:var(--text-3);margin-top:4px}
+.checkbox-line{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px}
+/* steps */
+.steps{display:flex;margin-bottom:22px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:16px 10px}
+.step{flex:1;display:flex;align-items:center;gap:10px;justify-content:center;cursor:pointer}
+.step .num{width:26px;height:26px;border-radius:50%;background:#e8edf5;color:var(--text-2);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.step.on .num{background:var(--primary);color:#fff}
+.step.done .num{background:var(--success);color:#fff}
+.step .lb{font-size:13px;color:var(--text-2)}
+.step.on .lb{color:var(--text);font-weight:600}
+.step .bar{flex:1;height:1px;background:var(--border);max-width:60px}
+/* modal / drawer / toast */
+.mask{position:fixed;inset:0;background:rgba(15,23,34,.45);z-index:100;display:flex;align-items:flex-start;justify-content:center}
+.modal{background:#fff;border-radius:10px;width:640px;max-width:94vw;margin-top:8vh;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.2)}
+.modal.lg{width:860px}
+.modal-h{padding:16px 20px;border-bottom:1px solid var(--border);font-weight:600;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.modal-b{padding:18px 20px;overflow-y:auto}
+.modal-f{padding:13px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+.x{cursor:pointer;color:var(--text-3);font-size:18px;line-height:1}.x:hover{color:var(--text)}
+.drawer-mask{position:fixed;inset:0;background:rgba(15,23,34,.4);z-index:100}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:760px;max-width:96vw;background:#fff;z-index:101;box-shadow:-8px 0 30px rgba(0,0,0,.15);display:flex;flex-direction:column}
+.drawer-h{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.drawer-b{padding:20px 22px;overflow-y:auto;flex:1}
+#toast-root{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{background:#fff;border:1px solid var(--border);border-left:4px solid var(--success);padding:11px 18px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:13.5px;animation:tin .2s}
+.toast.err{border-left-color:var(--danger)}
+@keyframes tin{from{opacity:0;transform:translateY(-8px)}to{opacity:1}}
+/* timeline */
+.tl{position:relative;padding-left:18px}
+.tl:before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--border)}
+.tl-item{position:relative;padding:0 0 14px 8px}
+.tl-item:before{content:"";position:absolute;left:-17px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--primary);border:2px solid #fff;box-shadow:0 0 0 2px var(--primary-l)}
+.tl-item.ok:before{background:var(--success);box-shadow:0 0 0 2px var(--success-l)}
+.tl-item.fail:before{background:var(--danger);box-shadow:0 0 0 2px var(--danger-l)}
+.tl-t{font-size:12px;color:var(--text-3)}
+.stage-bars{display:flex;height:26px;border-radius:6px;overflow:hidden;margin:10px 0 6px}
+.stage-bars div{display:flex;align-items:center;justify-content:center;color:#fff;font-size:11.5px;white-space:nowrap;overflow:hidden}
+.stage-legend{display:flex;gap:16px;font-size:12px;color:var(--text-2);flex-wrap:wrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.err-card{background:var(--danger-l);border:1px solid #f3c1c6;border-radius:8px;padding:13px 15px;margin-top:12px}
+.err-card .code{font-weight:700;color:var(--danger);font-size:13px}
+.err-card .fix{margin-top:6px;color:var(--text-2);font-size:13px;line-height:1.7}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;font-size:13.5px}
+.kv .k{color:var(--text-2)}
+.code-box{background:#0f172a;color:#d7e3f4;border-radius:8px;padding:13px 15px;font-family:Consolas,Menlo,monospace;font-size:12.5px;line-height:1.7;overflow-x:auto;white-space:pre}
+.md-preview{background:#fff;border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13.5px;line-height:1.8}
+.md-preview h4{margin:6px 0}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:16px}
+.tab{padding:9px 18px;cursor:pointer;font-size:14px;color:var(--text-2);border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.pill-nav{display:flex;gap:8px;flex-wrap:wrap}
+.pill{padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:13px;cursor:pointer;color:var(--text-2)}
+.pill.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.watermark-demo{position:relative;background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;padding:14px}
+.watermark-demo .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.watermark-demo .wm span{transform:rotate(-24deg);color:rgba(59,110,246,.14);font-size:30px;font-weight:700;white-space:nowrap}
+.stat-strip{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#fff;margin-bottom:16px}
+.stat-strip .cell{flex:1;padding:14px 18px;border-right:1px solid var(--border)}
+.stat-strip .cell:last-child{border-right:none}
+.stat-strip .v{font-size:22px;font-weight:700}
+.stat-strip .l{font-size:12.5px;color:var(--text-2);margin-top:2px}
+.mono{font-family:Consolas,Menlo,monospace;font-size:12.5px}
+.flex{display:flex;align-items:center;gap:8px}
+.spread{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}.mt14{margin-top:14px}.mb10{margin-bottom:10px}
+.footer-note{color:var(--text-3);font-size:12px;text-align:center;padding:18px 0 30px}
+/* login */
+#login{position:fixed;inset:0;background:linear-gradient(135deg,#1e2a3a 0%,#2c4a7c 60%,#3b6ef6 100%);display:flex;align-items:center;justify-content:center;z-index:400}
+.login-box{width:380px;background:#fff;border-radius:14px;padding:36px 34px;box-shadow:0 24px 70px rgba(0,0,0,.35)}
+.login-box h2{font-size:20px;margin-bottom:4px}
+.login-box .sub{color:var(--text-2);font-size:13px;margin-bottom:22px}
+.login-box .inp{width:100%;margin-bottom:12px;padding:10px 12px}
+.login-box .btn{width:100%;justify-content:center;padding:10px;margin-top:6px}
+.role-switch{display:flex;gap:8px;margin:14px 0 4px}
+.role-switch .pill{flex:1;text-align:center}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-box">
+    <h2>HermesPush</h2>
+    <div class="sub">智能数据推送平台 · 交互原型 v1.0（对应 PRD v1.0）</div>
+    <input class="inp" value="admin" id="login-user">
+    <input class="inp" type="password" value="********" id="login-pwd">
+    <div style="font-size:12.5px;color:var(--text-3)">选择体验角色（原型演示权限矩阵差异）</div>
+    <div class="role-switch" id="role-switch">
+      <span class="pill on" data-role="ADMIN">管理员</span>
+      <span class="pill" data-role="DEVELOPER">任务配置者</span>
+      <span class="pill" data-role="VIEWER">查看者</span>
+    </div>
+    <button class="btn pri" onclick="doLogin()">登 录</button>
+    <div class="hint" style="margin-top:12px">连续输错 5 次将锁定账户 15 分钟（FR-SEC-05）</div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <aside id="sidebar">
+    <div class="logo"><span class="mark">H</span>HermesPush</div>
+    <div id="nav"></div>
+  </aside>
+  <div id="main">
+    <div id="topbar">
+      <div class="crumb" id="crumb"></div>
+      <div class="top-right">
+        <span class="env-tag">原型环境 · 仿真数据</span>
+        <span style="color:var(--text-2);font-size:13px" id="whoami"></span>
+        <div class="avatar" id="avatar" title="退出登录" onclick="logout()">A</div>
+      </div>
+    </div>
+    <div id="content"></div>
+    <div class="footer-note">HermesPush 交互原型 · 仅用于需求评审演示，未连接后端 · PRD 编号 HP-PRD-2026-001</div>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+<div id="drawer-root"></div>
+<div id="toast-root"></div>
+
+<script>
+/* ================= mock 数据 ================= */
+const ROLES={ADMIN:'管理员',DEVELOPER:'任务配置者',VIEWER:'查看者'};
+let ROLE='ADMIN';
+
+const DS=[
+ {id:1,name:'主业务库(只读)',type:'MySQL',url:'jdbc:mysql://10.20.3.11:3306/trade',user:'ro_report',status:'启用',maxRows:50000,timeout:60,pool:5,ro:true},
+ {id:2,name:'报表汇总库(只读)',type:'PostgreSQL',url:'jdbc:postgresql://10.20.3.22:5432/dw',user:'ro_dw',status:'启用',maxRows:50000,timeout:60,pool:8,ro:true},
+ {id:3,name:'Oracle 财务库',type:'Oracle',url:'jdbc:oracle:thin:@10.20.4.31:1521:fin',user:'fin_ro',status:'启用',maxRows:20000,timeout:90,pool:3,ro:true},
+ {id:4,name:'测试库(旧)',type:'MySQL',url:'jdbc:mysql://10.9.9.9:3306/test',user:'tester',status:'停用',maxRows:5000,timeout:30,pool:2,ro:false},
+];
+const TPL=[
+ {id:1,name:'销售日报摘要.md',type:'MARKDOWN',ver:6,size:'3.2KB',by:'王晓芸',at:'2026-09-18 14:22',preset:false},
+ {id:2,name:'销售明细导出模板.xlsx',type:'EXCEL',ver:11,size:'86KB',by:'王晓芸',at:'2026-09-20 09:41',preset:false},
+ {id:3,name:'KPI看板.html',type:'HTML',ver:3,size:'12KB',by:'李成',at:'2026-09-15 16:03',preset:false},
+ {id:4,name:'[预置] 日报摘要模板.md',type:'MARKDOWN',ver:1,size:'2.1KB',by:'系统',at:'—',preset:true},
+ {id:5,name:'[预置] 明细导出模板.xlsx',type:'EXCEL',ver:1,size:'41KB',by:'系统',at:'—',preset:true},
+ {id:6,name:'[预置] 告警通知.md',type:'MARKDOWN',ver:1,size:'1.4KB',by:'系统',at:'—',preset:true},
+ {id:7,name:'[预置] KPI表格.html',type:'HTML',ver:1,size:'6.8KB',by:'系统',at:'—',preset:true},
+ {id:8,name:'[预置] 周报模板.md',type:'MARKDOWN',ver:1,size:'2.6KB',by:'系统',at:'—',preset:true},
+];
+const CH=[
+ {id:1,name:'销售一大群机器人',type:'WEWORK_BOT',target:'qyapi.weixin.qq.com/…8f3a',status:'启用',test:true,limit:'20/分钟'},
+ {id:2,name:'管理层日报群',type:'WEWORK_BOT',target:'qyapi.weixin.qq.com/…c91d',status:'启用',test:false,limit:'20/分钟'},
+ {id:3,name:'运维告警群(测试)',type:'WEWORK_BOT',target:'qyapi.weixin.qq.com/…2b7e',status:'启用',test:true,limit:'20/分钟'},
+ {id:4,name:'钉钉-华西部报表群',type:'DINGTALK_BOT',target:'oapi.dingtalk.com/…90ab',status:'启用',test:false,limit:'20/分钟'},
+ {id:5,name:'飞书-供应链群',type:'FEISHU_BOT',target:'open.feishu.cn/…f12c',status:'启用',test:false,limit:'20/分钟'},
+ {id:6,name:'公司邮件网关',type:'EMAIL_SMTP',target:'smtp.company.com:465',status:'启用',test:false,limit:'—'},
+ {id:7,name:'ETL回调端点',type:'GENERIC_WEBHOOK',target:'http://etl.internal…hook',status:'停用',test:false,limit:'—'},
+];
+const CH_TYPE={WEWORK_BOT:'企微机器人',DINGTALK_BOT:'钉钉机器人',FEISHU_BOT:'飞书机器人',EMAIL_SMTP:'邮件',GENERIC_WEBHOOK:'通用Webhook'};
+
+const TASKS=[
+ {id:101,key:'daily_sales_report',name:'销售日报(每日9点)',type:'REPORT',status:'已上线',cron:'0 0 9 * * ?',owner:'王晓芸',tags:['销售线','日报'],next:'今天 09:00',ds:'主业务库(只读)',ch:'销售一大群机器人、管理层日报群',tried:true,pin:null,ver:14},
+ {id:102,key:'weekly_kpi',name:'KPI周报(周一8点)',type:'REPORT',status:'已上线',cron:'0 0 8 ? * MON',owner:'李成',tags:['管理层','周报'],next:'09-28 08:00',ds:'报表汇总库(只读)',ch:'管理层日报群、公司邮件网关',tried:true,pin:'v9(固版)',ver:11},
+ {id:103,key:'inventory_alert',name:'库存下限监控',type:'ALERT',status:'已上线',cron:'0 */5 * * * ?',owner:'赵倩',tags:['供应链','监控'],next:'每5分钟',ds:'主业务库(只读)',ch:'飞书-供应链群',tried:true,pin:null,ver:5,alert:{state:'TRIGGERED',val:'37',cond:'stock_cnt < 100',since:'今天 07:35'}},
+ {id:104,key:'finance_monthly',name:'财务月报(先审核后推送)',type:'REPORT',status:'已上线',cron:'0 30 8 1 * ?',owner:'陈立',tags:['财务','月报','审核'],next:'10-01 08:30',ds:'Oracle 财务库',ch:'公司邮件网关',tried:true,pin:null,ver:8,approval:'指定审核人:陈立、周敏'},
+ {id:105,key:'branch_fanout',name:'分公司销售分发(一人一报)',type:'REPORT',status:'草稿',cron:'0 10 9 * * ?',owner:'王晓芸',tags:['销售线','分发'],next:'—',ds:'报表汇总库(只读)',ch:'公司邮件网关',tried:false,pin:null,ver:3,fanout:'清单SQL · 20行'},
+ {id:106,key:'overdue_order_alert',name:'订单逾期告警',type:'ALERT',status:'已暂停',cron:'0 */10 * * * ?',owner:'赵倩',tags:['供应链','监控'],next:'—',ds:'主业务库(只读)',ch:'运维告警群(测试)',tried:true,pin:null,ver:2,alert:{state:'OK',val:'0',cond:'overdue_cnt > 0',since:'09-19 22:10'}},
+ {id:107,key:'logistics_daily',name:'物流时效日报',type:'REPORT',status:'已上线',cron:'0 15 9 * * ?',owner:'李成',tags:['物流','日报'],next:'今天 09:15',ds:'报表汇总库(只读)',ch:'钉钉-华西部报表群',tried:true,pin:null,ver:6,ready:'探测SQL: SELECT ready_flag FROM etl_status WHERE dt=#{bizDate} 期望=1 窗口30分钟'},
+ {id:108,key:'tmp_check',name:'临时数据核对',type:'REPORT',status:'已下线',cron:'—',owner:'陈立',tags:['临时'],next:'—',ds:'测试库(旧)',ch:'运维告警群(测试)',tried:true,pin:null,ver:1},
+];
+const EXEC_STATUS={SUCCESS:['成功','b-ok'],PARTIAL_SUCCESS:['部分成功','b-part'],FAILED:['失败','b-fail'],RUNNING:['执行中','b-run'],PENDING:['排队中','b-gray'],RETRY_WAIT:['等待重试','b-warn'],TIMEOUT:['超时','b-fail'],CANCELLED:['已取消','b-gray'],WAIT_APPROVAL:['待审核','b-warn']};
+const EXECS=[
+ {id:'E20260921001',task:'销售日报(每日9点)',trig:'CRON',status:'SUCCESS',fire:'今天 09:00:02',biz:'2026-09-20',cost:'34.2s',rows:'1,284',ver:'v14',node:'node-2'},
+ {id:'E20260921002',task:'物流时效日报',trig:'CRON',status:'PARTIAL_SUCCESS',fire:'今天 09:15:01',biz:'2026-09-20',cost:'41.8s',rows:'862',ver:'v6',node:'node-1',err:{code:'PUSH-011',msg:'钉钉机器人限流等待超时(5分钟)',fix:'该时段同 webhook 消息密集。建议错峰调度，或调高排队等待超时。已自动重试失败渠道 1/3 次。'}},
+ {id:'E20260921003',task:'库存下限监控',trig:'CRON',status:'SUCCESS',fire:'今天 09:20:00',biz:'—',cost:'1.1s',rows:'1',ver:'v5',node:'node-2',note:'状态跃迁 OK→TRIGGERED，已发送告警'},
+ {id:'E20260920114',task:'财务月报(先审核后推送)',trig:'MANUAL',status:'WAIT_APPROVAL',fire:'昨天 17:02:44',biz:'2026-08-31',cost:'—',rows:'96',ver:'v8',node:'node-1'},
+ {id:'E20260920102',task:'分公司销售分发(一人一报)',trig:'TEST',status:'PARTIAL_SUCCESS',fire:'昨天 15:41:09',biz:'2026-09-19',cost:'2m18s',rows:'20 子执行',ver:'v3',node:'node-3',fanout:{total:20,ok:19,fail:1,failRow:'泸州分公司(manager@… 地址被拒 550)'}},
+ {id:'E20260920088',task:'销售日报(每日9点)',trig:'RETRY',status:'SUCCESS',fire:'昨天 09:00:31',biz:'2026-09-18',cost:'36.9s',rows:'1,190',ver:'v13',node:'node-2',note:'第1次重试成功(原因 DS-002 连接超时)'},
+ {id:'E20260919070',task:'KPI周报(周一8点)',trig:'CRON',status:'FAILED',fire:'09-19 08:00:03',biz:'2026-09-12',cost:'0.8s',rows:'—',ver:'v9',node:'node-1',err:{code:'SQL-004',msg:'必填参数 deptId 缺失',fix:'该版本快照中 deptId 为必填且无默认值。请在手动触发弹窗补填，或为参数设置默认值后保存新版本。'}},
+ {id:'E20260921004',task:'销售日报(每日9点)',trig:'TRIAL',status:'SUCCESS',fire:'今天 10:12:55',biz:'2026-09-20',cost:'6.4s',rows:'1,284',ver:'v14(草稿)',node:'node-1',note:'试运行，未推送'},
+];
+const AUDIT_SQL=[
+ {t:'今天 10:12:55',who:'王晓芸',ds:'主业务库(只读)',scene:'PREVIEW',rows:200,cost:'1.8s',sql:'SELECT dt, SUM(amount) amount, COUNT(*) cnt FROM sales_order WHERE dt = #{bizDate} GROUP BY dt'},
+ {t:'今天 09:00:03',who:'exec:E20260921001',ds:'主业务库(只读)',scene:'EXEC',rows:1284,cost:'2.3s',sql:'SELECT branch_name, cust_name, amount FROM sales_order WHERE dt = #{bizDate} AND branch_id = #{branchId}'},
+ {t:'今天 08:55:20',who:'李成',ds:'报表汇总库(只读)',scene:'PREVIEW',rows:0,cost:'0.4s',sql:'SELECT * FROM dw.kpi_summary_wk WHERE wk = ${weekTag}  ⚠ 文本替换参数已启用白名单校验'},
+ {t:'昨天 16:30:11',who:'陈立',ds:'Oracle 财务库',scene:'EXEC',rows:96,cost:'5.2s',sql:"SELECT acct, debit, credit FROM fin_ledger WHERE period = #{bizDate:yyyyMM}"},
+];
+const OPLOG=[
+ {t:'今天 09:40:02',who:'ADMIN(admin)',ent:'渠道/管理层日报群',act:'编辑',diff:'rate_limit: 20→30；webhook: [已变更]'},
+ {t:'今天 08:12:45',who:'王晓芸',ent:'任务/销售日报',act:'保存新版本 v14',diff:'datasets[0].sql: [已变更]；schedule.cron: 0 0 9 * * ? (未变)'},
+ {t:'昨天 18:02:19',who:'ADMIN(admin)',ent:'白名单/webhook域名',act:'新增',diff:'+ oapi.dingtalk.com'},
+ {t:'昨天 11:20:03',who:'ADMIN(admin)',ent:'数据源/主业务库(只读)',act:'编辑',diff:'pool.max: 5→8；password: [已变更]'},
+];
+const APPROVALS=[
+ {exec:'E20260920114',task:'财务月报(先审核后推送)',by:'陈立',at:'昨天 17:02',arts:['月报正文(Markdown)','财务月报.xlsx','财务月报.pdf'],timeout:'2小时后自动放弃推送'},
+ {exec:'E20260921009',task:'大客户对账单(周)',by:'周敏',at:'今天 08:31',arts:['对账单.xlsx'],timeout:'2小时后降级免审核推送'},
+];
+const FANOUT_ROWS=[
+ {branch:'成都分公司',email:'chengdu.mgr@company.com',params:'branchId=101',at:'138****2211'},
+ {branch:'绵阳分公司',email:'mianyang.mgr@company.com',params:'branchId=102',at:'139****3322'},
+ {branch:'泸州分公司',email:'luzhou.mgr@company.com',params:'branchId=103',at:'137****4433'},
+ {branch:'德阳分公司',email:'deyang.mgr@company.com',params:'branchId=104',at:'—'},
+];
+const ALERTS=TASKS.filter(t=>t.type==='ALERT');
+const ALERT_HIST=[
+ {t:'今天 07:35',task:'库存下限监控',from:'OK',to:'TRIGGERED',val:'37',note:'连续2次命中(防抖N=2)，发送告警至 飞书-供应链群'},
+ {t:'今天 07:25',task:'库存下限监控',from:'OK',to:'OK',val:'41',note:'命中1次，未达防抖阈值，不通知'},
+ {t:'09-19 22:10',task:'订单逾期告警',from:'TRIGGERED',to:'OK',val:'0',note:'发送恢复通知'},
+ {t:'09-19 14:05',task:'订单逾期告警',from:'OK',to:'TRIGGERED',val:'12',note:'发送告警'},
+];
+
+/* ================= 工具 ================= */
+const $=s=>document.querySelector(s);
+function badge(st){const m=EXEC_STATUS[st]||[st,'b-gray'];return `<span class="badge ${m[1]}">${m[0]}</span>`}
+function tbadge(s){const m={'已上线':'b-ok','草稿':'b-gray','已下线':'b-gray','已暂停':'b-warn'};return `<span class="badge ${m[s]||'b-gray'}">${s}</span>`}
+function toast(msg,err){const d=document.createElement('div');d.className='toast'+(err?' err':'');d.textContent=msg;$('#toast-root').appendChild(d);setTimeout(()=>d.remove(),2600)}
+function modal(title,body,footer,lg){$('#modal-root').innerHTML=`<div class="mask" onclick="if(event.target===this)closeModal()"><div class="modal${lg?' lg':''}"><div class="modal-h"><span>${title}</span><span class="x" onclick="closeModal()">✕</span></div><div class="modal-b">${body}</div>${footer?`<div class="modal-f">${footer}</div>`:''}</div></div>`}
+function closeModal(){$('#modal-root').innerHTML=''}
+function drawer(title,body){$('#drawer-root').innerHTML=`<div class="drawer-mask" onclick="closeDrawer()"></div><div class="drawer"><div class="drawer-h"><span>${title}</span><span class="x" onclick="closeDrawer()">✕</span></div><div class="drawer-b">${body}</div></div>`}
+function closeDrawer(){$('#drawer-root').innerHTML=''}
+function tbl(head,rows){return `<table class="tbl"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
+function can(f){ // 权限矩阵简化实现
+  const A=ROLE==='ADMIN',D=ROLE==='DEVELOPER';
+  const map={dsAdmin:A,taskEdit:A||D,tplEdit:A||D,chAdmin:A,audit:A,setting:A,sqlView:A||D,approve:A||D};
+  return map[f]!==false;
+}
+
+/* ================= 导航 ================= */
+const NAV=[
+ {g:'总览',items:[{k:'dash',i:'▦',n:'今日概览'}]},
+ {g:'推送任务',items:[{k:'tasks',i:'☰',n:'任务列表'},{k:'wizard',i:'＋',n:'新建任务(向导)'},{k:'alerts',i:'◔',n:'监控告警'},{k:'fanout',i:'⧉',n:'分发清单'},{k:'approve',i:'✓',n:'审核工作台'}]},
+ {g:'资源',items:[{k:'ds',i:'⛁',n:'数据源管理'},{k:'tpl',i:'▤',n:'模板库'},{k:'ch',i:'➤',n:'渠道管理'}]},
+ {g:'执行与审计',items:[{k:'exec',i:'⟳',n:'执行日志'},{k:'audit',i:'⚖',n:'审计中心'}]},
+ {g:'系统',items:[{k:'setting',i:'⚙',n:'系统设置'}]},
+];
+let PAGE='dash';
+function renderNav(){
+  $('#nav').innerHTML=NAV.map(g=>`<div class="nav-group">${g.g}</div>`+g.items.map(it=>
+    `<div class="nav-item ${PAGE===it.k?'active':''}" onclick="go('${it.k}')"><span class="ico">${it.i}</span>${it.n}</div>`).join('')).join('');
+  const all=NAV.flatMap(g=>g.items);const cur=all.find(x=>x.k===PAGE);
+  $('#crumb').innerHTML=`HermesPush / <b>${cur?cur.n:''}</b>`;
+}
+function go(k){PAGE=k;renderNav();render();window.scrollTo(0,0)}
+
+/* ================= 页面 ================= */
+const PAGES={};
+
+/* ---- 今日概览 ---- */
+PAGES.dash=()=>{
+ const today=EXECS.filter(e=>e.fire.startsWith('今天'));
+ const ok=today.filter(e=>e.status==='SUCCESS').length,fail=today.filter(e=>['FAILED','TIMEOUT'].length&&['FAILED','TIMEOUT'].includes(e.status)).length;
+ const run=today.filter(e=>['RUNNING','PENDING','WAIT_APPROVAL'].includes(e.status)).length;
+ const upcoming=[['09:00','销售日报(每日9点)','销售一大群机器人、管理层日报群'],['09:15','物流时效日报','钉钉-华西部报表群'],['09:30','(ALERT)库存下限监控 每5分钟','飞书-供应链群'],['10:00','回款进展提醒','管理层日报群']];
+ return `
+ <div class="page-title">今日概览</div><div class="page-sub">FR-OPS-01 · 平台运行状态一屏总览（${new Date().toLocaleDateString('zh-CN')}）</div>
+ <div class="stat-strip">
+  <div class="cell"><div class="v">${today.length}</div><div class="l">今日执行</div></div>
+  <div class="cell"><div class="v" style="color:var(--success)">${ok}</div><div class="l">成功</div></div>
+  <div class="cell"><div class="v" style="color:var(--danger)">${fail}</div><div class="l">失败</div></div>
+  <div class="cell"><div class="v" style="color:var(--primary)">${run}</div><div class="l">进行中/待审核</div></div>
+  <div class="cell"><div class="v">128</div><div class="l">在线任务</div></div>
+  <div class="cell"><div class="v">99.2%</div><div class="l">近30天成功率</div></div>
+ </div>
+ <div class="grid side">
+  <div class="card"><div class="card-title">未来 1 小时触发时间线<span class="lnk" onclick="go('tasks')">全部任务 →</span></div>
+   <div class="tl">${upcoming.map(u=>`<div class="tl-item"><b>${u[0]}</b>　${u[1]}<div class="tl-t">渠道：${u[2]}</div></div>`).join('')}</div>
+  </div>
+  <div>
+   <div class="card"><div class="card-title">ALERT 状态一览<span class="lnk" onclick="go('alerts')">面板 →</span></div>
+    ${ALERTS.map(a=>`<div class="spread" style="padding:8px 0;border-bottom:1px solid #f0f3f8"><span>${a.name}</span>${a.alert.state==='TRIGGERED'?`<span class="badge b-fail">TRIGGERED · ${a.alert.val}</span>`:`<span class="badge b-ok">OK</span>`}</div>`).join('')}
+   </div>
+   <div class="card"><div class="card-title">今日失败清单</div>
+    ${fail===0?'<div class="hint">今日暂无失败执行</div>':EXECS.filter(e=>e.err&&e.fire.startsWith('今天')).map(e=>`<div style="padding:7px 0;border-bottom:1px solid #f0f3f8"><span class="lnk" onclick="execDetail('${e.id}')">${e.task}</span><div class="hint mono">${e.err.code} ${e.err.msg}</div></div>`).join('')||'<div class="hint">无</div>'}
+   </div>
+  </div>
+ </div>`;
+};
+
+/* ---- 任务列表 ---- */
+PAGES.tasks=()=>{
+ const rows=TASKS.map(t=>[
+  `<span class="lnk" onclick="taskDetail(${t.id})">${t.name}</span><div class="hint mono">${t.key} · ${t.type==='ALERT'?'<span class="badge b-warn">ALERT</span>':'REPORT'}</div>`,
+  t.status==='已上线'&&t.type==='ALERT'?`<span class="badge ${t.alert.state==='TRIGGERED'?'b-fail':'b-ok'}">${t.alert.state}</span>`:tbadge(t.status),
+  `<span class="mono" style="font-size:12px">${t.cron}</span><div class="hint">${t.next}</div>`,
+  t.tags.map(x=>`<span class="badge b-gray" style="margin-right:4px">${x}</span>`).join(''),
+  t.owner,
+  `<div class="hint">${t.ds}</div><div class="hint">${t.ch}</div>`,
+  can('taskEdit')?`<span class="lnk" onclick="manualTrigger(${t.id})">触发</span> · <span class="lnk" onclick="taskDetail(${t.id})">详情</span> · <span class="lnk" onclick="toast('已复制为草稿：${t.name}-副本（FR-TSK-06）')">复制</span> · <span class="lnk" onclick="toast('已${t.status==='已上线'?'下线':'上线'}（演示）')">${t.status==='已上线'?'下线':'上线'}</span>`:'<span class="hint">仅查看</span>'
+ ]);
+ return `<div class="spread mb10"><div><div class="page-title">任务列表</div><div class="page-sub">FR-TSK-01~09 · 共 ${TASKS.length} 个任务（原型演示数据）</div></div>
+  <div class="flex">${can('taskEdit')?`<button class="btn" onclick="toast('批量操作：已选中 0 项（FR-TSK-08，单次上限50）')">批量操作</button><button class="btn" onclick="toast('导出 JSON：含任务快照与模板文件，不含凭据（FR-TSK-09）')">导出配置</button><button class="btn" onclick="toast('请选择导出的 JSON 文件（FR-TSK-09）')">导入配置</button>`:''}
+  <button class="btn pri" onclick="go('wizard')">＋ 新建任务</button></div></div>
+ <div class="card">
+  <div class="toolbar">
+   <input class="inp" placeholder="搜索任务名 / key" style="width:220px">
+   <select class="inp"><option>全部类型</option><option>REPORT</option><option>ALERT</option></select>
+   <select class="inp"><option>全部状态</option><option>已上线</option><option>草稿</option><option>已暂停</option><option>已下线</option></select>
+   <div class="pill-nav"><span class="pill on">全部标签</span><span class="pill">销售线</span><span class="pill">供应链</span><span class="pill">财务</span><span class="pill">管理层</span></div>
+  </div>
+  ${tbl(['任务','状态','调度 / 下次触发','标签','负责人','数据源 / 渠道','操作'],rows)}
+ </div>`;
+};
+
+function taskDetail(id){
+ const t=TASKS.find(x=>x.id===id);if(!t)return;
+ const vers=Array.from({length:5},(_,i)=>({v:t.ver-i,at:`2026-09-${20-i} 1${i}:0${i}`,by:t.owner,remark:i===0?'调整明细 SQL 过滤条件':i===1?'更换图片模板 v3':'—',cur:i===0}));
+ drawer(`任务详情 · ${t.name}`,`
+ <div class="kv mb10">
+  <span class="k">任务 Key</span><span class="mono">${t.key}</span>
+  <span class="k">类型 / 状态</span><span>${t.type} · ${tbadge(t.status)} ${t.pin?`<span class="badge b-warn">${t.pin}</span>`:''}</span>
+  <span class="k">调度</span><span class="mono">${t.cron}</span><span class="k">下次触发</span><span>${t.next}（Asia/Shanghai）</span>
+  <span class="k">负责人 / 标签</span><span>${t.owner} · ${t.tags.join(' / ')}</span>
+  <span class="k">数据源</span><span>${t.ds}</span>
+  <span class="k">渠道绑定</span><span>${t.ch}</span>
+  ${t.ready?`<span class="k">数据就绪预检</span><span class="hint" style="font-size:13px">${t.ready}（FR-EXE-09）</span>`:''}
+  ${t.approval?`<span class="k">审核策略</span><span>${t.approval}（FR-TSK-10）</span>`:''}
+  ${t.fanout?`<span class="k">分发清单</span><span>${t.fanout}（FR-FAN-01）</span>`:''}
+ </div>
+ <div class="flex mb10">
+  ${can('taskEdit')?`<button class="btn pri sm" onclick="manualTrigger(${t.id})">手动触发 / 补数</button><button class="btn sm" onclick="go('wizard')">编辑(生成新版本)</button><button class="btn sm" onclick="toast('试运行完成：3个数据集 共1,284行，产物预览见向导第5步')">试运行</button><button class="btn sm" onclick="toast('请选择测试渠道（仅 test 标记渠道或本人邮箱）')">测试发送</button>`:''}
+  <button class="btn sm" onclick="toast('Token 已生成：hp_trg_9f3a…（哈希存储，仅显示一次）')">生成入站触发 Token</button>
+ </div>
+ <div class="card" style="margin-bottom:12px"><div class="card-title">入站触发 API（FR-API-01）</div>
+  <div class="code-box">curl -X POST https://hermes.company.com/api/v1/tasks/${t.key}/trigger \\
+  -H "Authorization: Bearer hp_trg_****" \\
+  -d '{"bizDate":"2026-09-19","idempotencyKey":"etl-20260920-01"}'</div>
+  <div class="hint mt8">限流 10 次/分钟 · 全部调用写审计 · 返回执行ID，可经 FR-API-02 查询状态</div>
+ </div>
+ <div class="card"><div class="card-title">配置版本（FR-TSK-05）<span class="hint">当前 v${t.ver} ${t.pin?'· 固版运行中':''}</span></div>
+  ${tbl(['版本','时间','保存人','备注','操作'],vers.map(v=>[
+    v.cur?`<b>v${v.v}（当前）</b>`:`v${v.v}`,v.at,v.by,v.remark,
+    `<span class="lnk" onclick="toast('diff：v${v.v} ↔ v${v.cur?v.v+1:v.v+1} 字段级对比（演示）')">diff</span> · <span class="lnk" onclick="toast('已回滚：以 v${v.v} 快照创建 v${t.ver+1}（历史不可变）')">回滚</span>${v.cur?` · <span class="lnk" onclick="toast('${t.pin?'已解除固版':'已固版到 v'+v.v+'，编辑不再影响运行'}')">${t.pin?'解除固版':'固版'}</span>`:''}`
+  ]))}
+ </div>`);
+}
+function manualTrigger(id){
+ const t=TASKS.find(x=>x.id===id);
+ modal('手动触发 / 补数 · '+t.name,`
+ <div class="hint mb10">覆盖参数仅对本次执行生效（FR-TSK-04）。补跑历史日期请修改 bizDate。</div>
+ <label class="fl">bizDate 业务日期 <span class="req">*</span></label>
+ <div class="flex"><input class="inp" type="date" value="2026-09-20"><span class="hint">默认 = 触发日 -1 天</span></div>
+ <label class="fl">静态参数覆盖</label>
+ ${tbl(['参数','当前值','本次覆盖'],[['deptId','100','<input class="inp" style="width:120px" placeholder="不修改">'],['threshold','1000','<input class="inp" style="width:120px" placeholder="不修改">']])}
+ <label class="fl">幂等键（可选，API 触发防重）</label><input class="inp" style="width:100%" placeholder="manual-20260921-01">`,
+ `<button class="btn" onclick="closeModal()">取消</button><button class="btn pri" onclick="closeModal();toast('已写入执行记录 E20260921005（MANUAL），进入队列')">确认触发</button>`);
+}
+
+/* ---- 向导 ---- */
+let WZ=0;
+PAGES.wizard=()=>{
+ const lbs=['数据集','产物','渠道','调度','试运行'];
+ const steps=`<div class="steps">${lbs.map((l,i)=>`
+  ${i>0?'<div class="bar" style="flex:1;height:1px;background:var(--border);align-self:center"></div>':''}
+  <div class="step ${WZ===i?'on':WZ>i?'done':''}" onclick="WZ=${i};render()"><span class="num">${WZ>i?'✓':i+1}</span><span class="lb">${l}</span></div>`).join('')}</div>`;
+ const body=[wizDs,wizArt,wizCh,wizSched,wizTrial][WZ]();
+ return `<div class="spread mb10"><div><div class="page-title">新建推送任务（五步向导）</div><div class="page-sub">FR-TSK-01 · 各步支持保存草稿 · 首次上线前必须完成试运行（FR-TSK-02）</div></div>
+  <div class="flex"><button class="btn sm" onclick="toast('草稿已保存')">保存草稿</button>
+  <button class="btn sm" ${WZ===0?'disabled':''} onclick="WZ--;render()">上一步</button>
+  <button class="btn pri sm" onclick="${WZ===4?`toast('上线校验：未试运行任务不可上线（本例已试运行，上线成功）')`:`WZ++;render()`}">${WZ===4?'完成并上线':'下一步'}</button></div></div>
+ ${steps}<div class="card">${body}</div>`;
+};
+function wizDs(){return `
+ <div class="spread mb10"><b>第 1 步 · 数据集</b><button class="btn sm" onclick="toast('已添加数据集 ds2（最多10个）')">＋ 添加数据集</button></div>
+ <div class="card" style="background:#fafbfd">
+  <div class="spread"><b>ds1 · 销售明细</b><span class="badge b-ok">校验通过</span></div>
+  <label class="fl">数据源 <span class="req">*</span>（仅显示已授权数据源，FR-DS-05）</label>
+  <select class="inp" style="width:320px">${DS.filter(d=>d.status==='启用').map(d=>`<option>${d.name}</option>`).join('')}</select>
+  <label class="fl">SQL <span class="req">*</span>（单条 SELECT；#{'#{param}'} 预编译绑定，${'${param}'} 需显式开启文本替换）</label>
+  <div class="code-box" contenteditable="true">SELECT branch_name, cust_name, amount, dt
+FROM sales_order
+WHERE dt = #{bizDate}
+  AND branch_id = #{branchId}</div>
+  <div class="flex mt8"><button class="btn sm" onclick="toast('Druid 校验通过：单条 SELECT，无 DDL/DML/多语句')">安全校验</button>
+  <button class="btn sm pri" onclick="toast('试运行返回 200 行 / 1,284 行总量，字段：branch_name(varchar) cust_name(varchar) amount(decimal) dt(date)')">▶ 预览数据(200行)</button>
+  <span class="hint">预览写入 SQL 审计 scene=PREVIEW</span></div>
+  <label class="fl">参数定义</label>
+  ${tbl(['参数','类型','来源','必填','文本替换','白名单/正则'],[
+   ['bizDate','日期','时间变量(偏移-1d)','是','否','—'],
+   ['branchId','整数','任务静态参数=100，可被手动触发/清单行覆盖','是','否','—'],
+   ['weekTag','字符串','静态参数','否','<span class="badge b-warn">已启用</span>','<span class="mono">^\\\\d{4}W\\\\d{2}$</span>'])]}
+ </div>`;}
+function wizArt(){return `
+ <div class="spread mb10"><b>第 2 步 · 产物（Artifact）</b><button class="btn sm" onclick="toast('已添加产物（上限10个）')">＋ 添加产物</button></div>
+ ${tbl(['产物','类型','模板 / 来源','渲染配置','操作'],[
+  ['A1 摘要','<span class="badge b-run">MARKDOWN</span>','销售日报摘要.md <span class="hint">v6 ▾（可固版）</span>','超长策略：截断加提示','<span class="lnk">编辑</span>'],
+  ['A2 明细','<span class="badge b-ok">EXCEL</span>','销售明细导出模板.xlsx <span class="hint">v11 ▾</span>','分批填充(>10000行)','<span class="lnk">编辑</span>'],
+  ['A3 表格图','<span class="badge b-warn">IMAGE</span>','source=HTML模板 · KPI看板.html <span class="hint">引擎: HTML_SHOT(默认)</span>','行数上限200 · 超限:TRUNCATE_TOP_N · 水印:开','<span class="lnk">编辑</span>'],
+  ['A4 归档PDF','<span class="badge b-part">PDF</span>','source=HTML模板 · KPI看板.html <span class="hint">引擎: HTML_PRINT</span>','页眉页脚 · A4','<span class="lnk">编辑</span>'])}
+ <div class="card mt14" style="background:#fafbfd"><b>产物 A3 配置（IMAGE）</b>
+  <label class="fl">source</label>
+  <div class="pill-nav"><span class="pill on">HTML 模板（网页截图路线，业界主流）</span><span class="pill">引用 EXCEL 产物（文件转图路线）</span></div>
+  <label class="fl">转换引擎（HTML 路线固定 Playwright；文件路线可选）</label>
+  <div class="pill-nav"><span class="pill on">HTML_SHOT（默认）</span><span class="pill">LIBREOFFICE</span><span class="pill" style="opacity:.5" title="无 License 时置灰（开放问题2）">ASPOSE（未检测到License）</span></div>
+  <div class="grid c3 mt14">
+   <div><label class="fl">行数上限</label><input class="inp" value="200" style="width:100%"></div>
+   <div><label class="fl">超限策略</label><select class="inp" style="width:100%"><option>TRUNCATE_TOP_N（图内标注）</option><option>DEGRADE_TO_FILE（改发Excel）</option><option>FAIL</option></select></div>
+   <div><label class="fl">DPI</label><select class="inp" style="width:100%"><option>2x（默认）</option><option>1.5x</option><option>3x</option></select></div>
+  </div>
+  <label class="fl">水印（FR-RD-07）</label>
+  <div class="flex"><input class="inp" style="flex:1" value="仅供 {fanout.branch} 使用 · {bizDate} · 销售日报"><label class="checkbox-line" style="margin:0"><input type="checkbox" checked>启用</label></div>
+  <div class="hint">变量支持：任务名 / bizDate / 接收人 / FANOUT 清单行字段</div>
+  <div class="mt14"><button class="btn sm" onclick="toast('已按 ds1 列元数据生成默认 HTML 表格模板（FR-TPL-05），可下载修改后回传')">⚡ 按查询结果生成默认 HTML 模板</button>
+  <button class="btn sm" onclick="toast('对比页：三种引擎并行渲染，结果并排展示（FR-RD-08）')">渲染效果对比</button></div>
+ </div>`;}
+function wizCh(){return `
+ <div class="spread mb10"><b>第 3 步 · 渠道绑定</b><span class="hint">为每个渠道勾选要发送的产物与消息类型（渠道级部分成功 FR-CH-06）</span></div>
+ ${tbl(['渠道','类型','产物 → 消息类型','@成员','操作'],[
+  ['销售一大群机器人','企微机器人','A1→markdown · A3→image','—','<span class="lnk danger" onclick="toast(\\'已解绑\\')">解绑</span>'],
+  ['管理层日报群','企微机器人','A1→markdown · A2→file · A4→(邮件转发)','—','<span class="lnk danger">解绑</span>'],
+  ['公司邮件网关','邮件','正文=A1(HTML化) · 附件=A2,A4','—','<span class="lnk danger">解绑</span>']])}
+ <button class="btn sm mt14" onclick="toast('从渠道列表选择（仅显示启用渠道；webhook 白名单校验在渠道侧完成）')">＋ 绑定渠道</button>
+ <div class="card mt14" style="background:#fafbfd"><b>邮件渠道配置（FR-CH-10）</b>
+  <label class="fl">收件人（需在收件人白名单内，名单外拒发并审计）</label>
+  <input class="inp" style="width:100%" value="sales-leaders@company.com; cfo@company.com">
+  <label class="fl">主题模板</label><input class="inp" style="width:100%" value="[销售日报] {bizDate} 销售明细与摘要">
+  <div class="hint">附件总大小上限 20MB · 正文可绑定 MARKDOWN/HTML 产物渲染结果 · 消息回链自动追加（FR-CH-11，需配置 platformBaseUrl）</div>
+ </div>`;}
+function wizSched(){return `
+ <b>第 4 步 · 调度与策略</b>
+ <div class="grid c2 mt14">
+  <div><label class="fl">Cron 表达式 <span class="req">*</span>（时区 Asia/Shanghai）</label>
+   <input class="inp" style="width:100%" value="0 0 9 * * ?">
+   <div class="hint">未来5次：09-22 09:00 / 09-23 09:00 / 09-24 09:00 / 09-25 09:00 / 09-26 09:00</div>
+   <div class="pill-nav mt8"><span class="pill">每天 09:00</span><span class="pill">工作日 08:30</span><span class="pill">每周一 08:00</span><span class="pill">每月1日 08:30</span></div></div>
+  <div><label class="fl">bizDate 偏移</label><select class="inp" style="width:100%"><option>-1 天（默认，昨日数据）</option><option>当天</option><option>-2 天</option></select>
+   <label class="fl">执行超时</label><input class="inp" style="width:100%" value="10 分钟">
+   <label class="fl">失败重试</label><div class="flex"><input class="inp" value="3" style="width:60px"><span class="hint">次 · 指数退避 30s/2m/8m · 仅可重试错误</span></div></div>
+ </div>
+ <label class="fl">空结果集策略（FR-TSK-07）</label>
+ <div class="pill-nav"><span class="pill on">SKIP 跳过不推送</span><span class="pill">PUSH_PLACEHOLDER 推送“今日无数据”</span><span class="pill">FAIL 记为失败</span></div>
+ <div class="hint mt8">判定口径：全部数据集均无行（可指定以 ds1 为准）</div>
+ <label class="fl">数据就绪预检（FR-EXE-09，可选）</label>
+ <div class="checkbox-line"><input type="checkbox"><span>启用：探测 SQL 满足条件后才执行，否则 30 分钟窗口内每 5 分钟轮询；窗口耗尽放弃本次执行</span></div>
+ <label class="fl">审核策略（FR-TSK-10，M5）</label>
+ <select class="inp" style="width:320px"><option>免审核（默认）</option><option>指定审核人（渲染完成后进入 WAIT_APPROVAL）</option></select>
+ <label class="fl">个性化分发 FANOUT（FR-FAN-01，M5）</label>
+ <select class="inp" style="width:320px"><option>不启用</option><option>静态清单</option><option>清单 SQL</option></select>`;}
+function wizTrial(){return `
+ <b>第 5 步 · 试运行与测试发送（FR-TSK-02）</b>
+ <div class="flex mt14"><button class="btn pri sm" onclick="toast('试运行完成：ds1 1,284行/2.3s，产物 A1-A4 渲染成功')">▶ 执行试运行（查询+渲染，不推送）</button>
+ <span class="hint">试运行写 SQL 审计（scene=PREVIEW）· 未试运行的任务无法上线</span></div>
+ <div class="grid c2 mt14">
+  <div class="card" style="margin:0"><div class="card-title">A1 · Markdown 摘要预览</div>
+   <div class="md-preview"><h4>【销售日报】2026-09-20</h4>
+   <div>昨日成交额 <b>¥1,284,530</b>（环比 +6.2%），订单 <b>1,284</b> 笔。</div>
+   <div>Top3 分公司：成都 ¥312,004 · 绵阳 ¥208,771 · 德阳 ¥177,420</div>
+   <div class="hint">逾期订单 12 笔，占比 0.9%，已低于阈值 2%。</div>
+   <div class="hint" style="color:var(--primary)">查看执行详情 →（消息回链 FR-CH-11）</div></div></div>
+  <div class="card" style="margin:0"><div class="card-title">A2 · Excel 明细预览（前50行/共1,284行）</div>
+   ${tbl(['分公司','客户','金额','日期'],[['成都分公司','华西商贸','12,300.00','2026-09-20'],['成都分公司','锦官城零售','8,750.50','2026-09-20'],['绵阳分公司','涪江批发','22,100.00','2026-09-20'],['…','…','…','…']])}</div>
+ </div>
+ <div class="grid c2 mt14">
+  <div class="card" style="margin:0"><div class="card-title">A3 · 图片预览（HTML_SHOT · 200行上限 · 水印开）</div>
+   <div class="watermark-demo">${tbl(['分公司','成交额','环比'],[['成都分公司','¥312,004','+8.1%'],['绵阳分公司','¥208,771','+3.4%'],['德阳分公司','¥177,420','-1.2%'],['泸州分公司','¥96,318','+12.7%']])}
+   <div class="wm"><span>仅供 成都分公司 使用 · 2026-09-20 · 销售日报</span></div></div>
+   <div class="hint mt8">1,284 行 &gt; 上限 200 → 按 TRUNCATE_TOP_N 渲染前 200 行，图内标注“仅显示前200行，完整数据见附件”</div></div>
+  <div class="card" style="margin:0"><div class="card-title">A4 · PDF 预览（HTML_PRINT · A4）</div>
+   <div style="border:1px solid var(--border);border-radius:6px;padding:18px;background:#fff;min-height:150px">
+    <div style="font-weight:700;margin-bottom:8px">销售日报 · 2026-09-20</div>
+    <div class="hint">第 1 / 3 页 · 页眉：任务名+bizDate · 页脚：页码+生成时间</div>
+    <div class="mt14 hint">（PDF 内容 = HTML 模板打印渲染，与图片同源同模板）</div></div></div>
+ </div>
+ <div class="card mt14"><div class="card-title">测试发送</div>
+  <div class="flex"><select class="inp" style="width:300px"><option>运维告警群(测试) [test]</option><option>我的邮箱 wangxy@company.com</option></select>
+  <button class="btn pri sm" onclick="toast('测试发送成功：消息带[测试]前缀，执行日志已记录 trigger_type=TEST')">发送测试</button>
+  <span class="hint">仅可选管理员标记 test 的渠道或本人邮箱 · 计入每日配额（默认20次）</span></div>
+ </div>`;}
+
+/* ---- 监控告警 ---- */
+PAGES.alerts=()=>{
+ return `<div class="page-title">监控告警（ALERT 任务）</div><div class="page-sub">FR-ALR-01~04 · 状态跃迁才通知（OK↔TRIGGERED），持续触发期间不重复发送</div>
+ <div class="grid c2 mb10">${ALERTS.map(a=>`
+  <div class="card" style="margin:0"><div class="spread"><b>${a.name}</b>${a.alert.state==='TRIGGERED'?'<span class="badge b-fail">● TRIGGERED</span>':'<span class="badge b-ok">● OK</span>'}</div>
+   <div class="kv mt8">
+    <span class="k">监控条件</span><span class="mono">${a.alert.cond}</span>
+    <span class="k">最近评估值</span><b style="color:${a.alert.state==='TRIGGERED'?'var(--danger)':'inherit'}">${a.alert.val}</b>
+    <span class="k">评估周期</span><span class="mono">${a.cron}</span>
+    <span class="k">防抖</span><span>连续 2 次命中才跃迁</span>
+    <span class="k">通知渠道</span><span>${a.ch}</span>
+    <span class="k">状态始于</span><span>${a.alert.since}</span>
+   </div>
+   <div class="flex mt14"><button class="btn sm" onclick="toast('测试触发：按当前数据评估并强制发送到所选测试渠道，不影响正式状态')">测试触发</button>
+   <button class="btn sm" onclick="go('tasks')">任务详情</button></div>
+  </div>`).join('')}
+ </div>
+ <div class="card"><div class="card-title">状态跃迁历史</div>
+  ${tbl(['时间','任务','跃迁','触发值','说明'],ALERT_HIST.map(h=>[h.t,h.task,
+   `${h.from==='OK'?'<span class="badge b-ok">OK</span>':'<span class="badge b-fail">TRIGGERED</span>'} → ${h.to==='OK'?'<span class="badge b-ok">OK</span>':'<span class="badge b-fail">TRIGGERED</span>'}`,
+   `<b>${h.val}</b>`,h.note]))}
+ </div>
+ <div class="card"><div class="card-title">系统失败告警（FR-ALR-04）</div>
+  <div class="kv"><span class="k">告警渠道</span><span>运维告警群(企微) + ops@company.com</span>
+  <span class="k">触发事件</span><span>重试耗尽 · 连续失败3次 · 超期未触发(2周期) · 渲染进程超时 · 存储上传失败 · 数据源连续不可用</span>
+  <span class="k">去重静默</span><span>同一(任务,错误码) 30 分钟内仅发一次</span></div>
+ </div>`;
+};
+
+/* ---- 分发清单 ---- */
+PAGES.fanout=()=>`
+ <div class="page-title">分发清单（FANOUT · 个性化分发）</div><div class="page-sub">FR-FAN-01~03 · 任务：分公司销售分发(一人一报) · 每行 = 一个接收目标 + 一组参数，扇出子执行，一人一报</div>
+ <div class="card">
+  <div class="tabs"><div class="tab on">清单 SQL</div><div class="tab" onclick="toast('切换为静态清单（界面表格维护）')">静态清单</div></div>
+  <div class="code-box" contenteditable="true">SELECT branch_name  AS fanout_key,
+       manager_email AS target_email,
+       manager_phone AS at_mobile,
+       branch_id     AS branchId        -- 其余列全部注入为子执行参数
+FROM   dim_branch
+WHERE  status = 1</div>
+  <div class="flex mt8"><button class="btn sm pri" onclick="toast('清单预览：返回 20 行（上限200，FR-FAN-02）')">预览清单</button>
+  <span class="hint">约定列：fanout_key(行标识) · target_email(邮件收件人) · at_mobile(企微@成员) · 其余列注入参数 · 走同一套 SQL 校验/保护/审计</span></div>
+ </div>
+ <div class="card"><div class="card-title">清单预览（前4行 / 共20行）</div>
+  ${tbl(['fanout_key','邮件收件人','企微@','注入参数','水印变量'],FANOUT_ROWS.map(r=>[r.branch,r.email,r.at,r.params,`{fanout.branch} → ${r.branch}`]))}
+ </div>
+ <div class="card"><div class="card-title">最近父执行 · E20260920102（测试发送）<span class="badge b-part">PARTIAL_SUCCESS</span></div>
+  <div class="stat-strip" style="margin:10px 0">
+   <div class="cell"><div class="v">20</div><div class="l">子执行总数</div></div>
+   <div class="cell"><div class="v" style="color:var(--success)">19</div><div class="l">成功</div></div>
+   <div class="cell"><div class="v" style="color:var(--danger)">1</div><div class="l">失败</div></div>
+   <div class="cell"><div class="v">2m18s</div><div class="l">父执行耗时</div></div>
+  </div>
+  ${tbl(['子执行','fanout_key','状态','渠道','说明'],[
+   ['E…102-07','泸州分公司','<span class="badge b-fail">失败</span>','邮件','SMTP 550 地址被拒（不可重试）· 错误码 PUSH-021'],
+   ['E…102-01','成都分公司','<span class="badge b-ok">成功</span>','邮件+企微@','1.2s / 0.8s'],
+   ['E…102-02','绵阳分公司','<span class="badge b-ok">成功</span>','邮件+企微@','1.1s / 0.9s']])}
+  <div class="flex mt14"><button class="btn sm pri" onclick="toast('仅重跑失败子执行：E…102-07 已重新入队')">仅重跑失败行</button><span class="hint">单个子执行失败不影响其他行 · 子执行独立重试与幂等</span></div>
+ </div>`;
+
+/* ---- 审核工作台 ---- */
+PAGES.approve=()=>`
+ <div class="page-title">审核工作台（WAIT_APPROVAL）</div><div class="page-sub">FR-TSK-10 · 配置了审核策略的任务，产物渲染完成后暂停，审核通过才推送 · 审核动作写审计</div>
+ ${APPROVALS.length===0?'<div class="card">当前无待审核执行</div>':APPROVALS.map(a=>`
+ <div class="card"><div class="spread"><div><b>${a.task}</b> <span class="badge b-warn">待审核</span>
+   <div class="hint mt8">执行 ${a.exec} · 提交人 ${a.by} · ${a.at} · 超时策略：${a.timeout}</div></div>
+   <div class="flex"><button class="btn sm" onclick="previewApproval('${a.exec}')">预览产物</button>
+   <button class="btn sm pri" onclick="toast('已批准：${a.exec} 继续推送流程')">批准并推送</button>
+   <button class="btn sm danger" onclick="rejectApproval('${a.exec}')">驳回</button></div></div>
+   <div class="hint mt8">产物：${a.arts.join(' · ')}</div>
+ </div>`).join('')}`;
+function previewApproval(e){modal('产物预览 · '+e,`
+ <div class="md-preview mb10"><h4>【财务月报】2026-08</h4><div>营业收入 ¥42.3M（同比 +11.2%），毛利率 38.1%。</div><div class="hint">应收账款周转天数 46 天，较上月 -3 天。</div></div>
+ ${tbl(['Sheet','行数','说明'],[['收入明细','96','按科目汇总'],['应收账龄','42','30/60/90+ 分段']])}`,
+ `<button class="btn" onclick="closeModal()">关闭</button><button class="btn pri" onclick="closeModal();toast('已批准并继续推送')">批准并推送</button>`,true)}
+function rejectApproval(e){modal('驳回 · '+e,`<label class="fl">驳回原因 <span class="req">*</span>（必填，写入审计）</label><textarea class="inp" rows="3" placeholder="例如：应收账龄分段口径与财务部确认版本不一致"></textarea>`,
+ `<button class="btn" onclick="closeModal()">取消</button><button class="btn danger" onclick="closeModal();toast('已驳回：执行终止(CANCELLED)，通知任务负责人')">确认驳回</button>`)}
+
+/* ---- 数据源 ---- */
+PAGES.ds=()=>`
+ <div class="spread mb10"><div><div class="page-title">数据源管理</div><div class="page-sub">FR-DS-01~05 · 密码 AES-GCM 加密存储，接口不回显明文 · 必须使用只读账号</div></div>
+ ${can('dsAdmin')?'<button class="btn pri" onclick="dsForm()">＋ 新增数据源</button>':''}</div>
+ <div class="card">${tbl(['名称','类型','连接','状态','保护配置','只读确认','操作'],DS.map(d=>[
+  `<b>${d.name}</b>`,d.type,`<span class="mono" style="font-size:12px">${d.url}</span><div class="hint">用户: ${d.user} · 密码: ******</div>`,
+  d.status==='启用'?'<span class="badge b-ok">启用</span>':'<span class="badge b-gray">停用</span>',
+  `<span class="hint">超时${d.timeout}s · 上限${d.maxRows}行 · 池${d.pool}</span>`,
+  d.ro?'<span class="badge b-ok">已确认</span>':'<span class="badge b-fail">未确认</span>',
+  (can('dsAdmin')?`<span class="lnk" onclick="toast('SELECT 1 成功 · 耗时 23ms · MySQL 8.0.36')">测试连接</span> · <span class="lnk" onclick="dsForm('${d.name}')">编辑</span> · <span class="lnk" onclick="toast('授权：按用户/角色授予使用权限（FR-DS-05）')">授权</span> · <span class="lnk danger" onclick="toast('存在 3 个运行中任务引用，请先确认影响面')">停用</span>`:`<span class="lnk" onclick="toast('SELECT 1 成功 · 耗时 23ms')">测试连接</span>`)
+ ]))}</div>`;
+function dsForm(name){modal(name?'编辑数据源 · '+name:'新增数据源',`
+ <div class="grid c2">
+  <div><label class="fl">名称 <span class="req">*</span></label><input class="inp" style="width:100%" value="${name||''}" placeholder="如：主业务库(只读)"></div>
+  <div><label class="fl">类型 <span class="req">*</span></label><select class="inp" style="width:100%"><option>MySQL</option><option>PostgreSQL</option><option>Oracle</option></select></div>
+ </div>
+ <label class="fl">JDBC URL <span class="req">*</span></label><input class="inp" style="width:100%" placeholder="jdbc:mysql://host:3306/db">
+ <div class="grid c2">
+  <div><label class="fl">用户名 <span class="req">*</span></label><input class="inp" style="width:100%"></div>
+  <div><label class="fl">密码 <span class="req">*</span>（加密存储，编辑时留空=不修改）</label><input class="inp" style="width:100%" type="password" placeholder="••••••••"></div>
+  <div><label class="fl">查询超时（秒）</label><input class="inp" style="width:100%" value="60"></div>
+  <div><label class="fl">行数上限</label><input class="inp" style="width:100%" value="50000"></div>
+ </div>
+ <div class="err-card" style="background:var(--warn-l);border-color:#ecd9a8"><span class="code" style="color:var(--warn)">⚠ 只读账号强制要求（FR-DS-03）</span>
+  <div class="fix">平台执行的都是查询，但配置错误账号可能导致数据被意外修改。请为该数据源创建仅有 SELECT 权限的账号。</div></div>
+ <div class="checkbox-line"><input type="checkbox" id="ro-ck"><span>我已确认该账号无写权限（勾选记录写入配置审计）</span></div>`,
+ `<button class="btn" onclick="closeModal()">取消</button>
+  <button class="btn" onclick="toast('SELECT 1 成功 · 耗时 23ms')">测试连接</button>
+  <button class="btn pri" onclick="if(!document.querySelector('#ro-ck').checked){toast('请先勾选只读账号确认',true);return}closeModal();toast('数据源已保存（密码已加密）')">保存</button>`)}
+
+/* ---- 模板库 ---- */
+PAGES.tpl=()=>`
+ <div class="spread mb10"><div><div class="page-title">模板库</div><div class="page-sub">FR-TPL-01~05 · 三类模板：EXCEL(.xlsx≤20MB) / MARKDOWN(.md≤256KB) / HTML(.html|.ftl≤256KB) · 每次上传生成新版本，历史不可变</div></div>
+ ${can('tplEdit')?'<button class="btn pri" onclick="toast('上传弹窗：选择类型 → 拖拽文件 → 校验扩展名与文件头 → 填写版本备注')">⬆ 上传模板</button>':''}</div>
+ <div class="card"><div class="card-title">预置模板库（FR-TPL-04）</div>
+  <div class="grid c3">${TPL.filter(t=>t.preset).map(t=>`<div class="card" style="margin:0;background:#fafbfd"><b>${t.name}</b><div class="hint mt8">${t.type} · 系统内置</div>
+   <div class="flex mt8"><button class="btn sm" onclick="toast('已复制为我的模板')">复制使用</button><button class="btn sm" onclick="toast('已用该模板创建任务骨架（含样例数据集）')">一键建任务</button></div></div>`).join('')}</div>
+ </div>
+ <div class="card"><div class="card-title">我的模板</div>
+  ${tbl(['模板','类型','最新版本','大小','最近上传','操作'],TPL.filter(t=>!t.preset).map(t=>[
+   `<b>${t.name}</b>`,t.type,`v${t.ver}`,t.size,`${t.by} · ${t.at}`,
+   `<span class="lnk" onclick="tplVersions(${t.id})">版本历史</span> · <span class="lnk" onclick="toast('下载 v${t.ver} 原始文件')">下载</span> · <span class="lnk" onclick="toast('预览：${t.type==='EXCEL'?'解析 sheet 结构与 {} 占位符清单':'源码 + 渲染占位效果'}')">预览</span>`]))}
+ </div>`;
+function tplVersions(id){const t=TPL.find(x=>x.id===id);
+ const vs=Array.from({length:Math.min(t.ver,5)},(_,i)=>({v:t.ver-i,at:`2026-09-${19-i} 1${i}:2${i}`,by:t.by,remark:i===0?'调整合计行样式':'—',sum:'a3f'+(9-i)+'c2…d41'}));
+ drawer(`模板版本 · ${t.name}`,`
+ <div class="hint mb10">回滚 = 以历史版本内容创建新版本，历史不可变（FR-TPL-02）。任务引用模板时可固定版本号，执行记录关联具体版本。</div>
+ ${tbl(['版本','上传时间','上传人','校验和','备注','操作'],vs.map(v=>[
+  v.v===t.ver?`<b>v${v.v}（最新）</b>`:`v${v.v}`,v.at,v.by,`<span class="mono">${v.sum}</span>`,v.remark,
+  `<span class="lnk" onclick="toast('下载 v${v.v}')">下载</span> · <span class="lnk" onclick="toast('已以 v${v.v} 内容创建 v${t.ver+1}（回滚）')">回滚到此版</span>`]))}`)}
+
+/* ---- 渠道 ---- */
+PAGES.ch=()=>`
+ <div class="spread mb10"><div><div class="page-title">渠道管理</div><div class="page-sub">FR-CH-01~13 · 五类渠道 · 凭据加密存储 · webhook 域名白名单管控（FR-CH-04）</div></div>
+ ${can('chAdmin')?'<button class="btn pri" onclick="chForm()">＋ 新增渠道</button>':''}</div>
+ <div class="card">${tbl(['渠道','类型','目标(脱敏)','限流','用途','状态','操作'],CH.map(c=>[
+  `<b>${c.name}</b>${c.test?' <span class="badge b-warn">测试渠道</span>':''}`,CH_TYPE[c.type],
+  `<span class="mono" style="font-size:12px">${ROLE==='ADMIN'?c.target:c.target.slice(0,22)+'****'}</span>`,c.limit,
+  c.type==='EMAIL_SMTP'?'收件人白名单：@company.com':c.type==='GENERIC_WEBHOOK'?'请求体模板：exec-result.json.ftl':'群机器人',
+  c.status==='启用'?'<span class="badge b-ok">启用</span>':'<span class="badge b-gray">停用</span>',
+  `<span class="lnk" onclick="toast('测试消息已发送：[HermesPush] 健康检查 ${new Date().toLocaleTimeString()} · 200 OK')">健康检查</span>`+(can('chAdmin')?` · <span class="lnk" onclick="chForm('${c.name}')">编辑</span> · <span class="lnk danger" onclick="toast('停用前校验引用：2 个上线任务绑定该渠道')">停用</span>`:'')
+ ]))}</div>
+ ${can('chAdmin')?`<div class="card"><div class="card-title">Webhook 域名白名单（仅 ADMIN 可改，变更写审计）</div>
+  <div class="pill-nav"><span class="pill on">qyapi.weixin.qq.com</span><span class="pill on">oapi.dingtalk.com</span><span class="pill on">open.feishu.cn</span><span class="pill on">http://etl.internal.company.com</span><span class="pill" onclick="toast('新增域名需填写并说明用途')">＋ 添加</span></div>
+  <div class="hint mt8">目的：防止配置外部地址导致数据外流。保存渠道与 GENERIC_WEBHOOK 目标 URL 时强校验。</div></div>
+ <div class="card"><div class="card-title">邮件收件人白名单（FR-CH-10）</div>
+  <div class="pill-nav"><span class="pill on">@company.com（域名级）</span><span class="pill on">cfo@company.com</span><span class="pill" onclick="toast('添加地址或域名')">＋ 添加</span></div></div>
+ <div class="card"><div class="card-title">通讯录（FR-CH-13 · M5）</div>
+  <div class="flex"><button class="btn sm" onclick="toast('CSV 批量导入：姓名,邮箱,部门')">导入联系人 CSV</button><span class="hint">FANOUT 静态清单与邮件收件人可从通讯录选择 · 不做企微通讯录API同步（范围外）</span></div></div>`:''}`;
+function chForm(name){modal(name?'编辑渠道 · '+name:'新增渠道',`
+ <label class="fl">渠道类型 <span class="req">*</span></label>
+ <select class="inp" style="width:100%" id="ch-type" onchange="chTypeHint()">
+  <option value="WEWORK_BOT">企业微信群机器人（M1）</option><option value="DINGTALK_BOT">钉钉群机器人（M4）</option>
+  <option value="FEISHU_BOT">飞书群机器人（M4）</option><option value="EMAIL_SMTP">邮件 SMTP（M4）</option>
+  <option value="GENERIC_WEBHOOK">通用 Webhook（M5）</option></select>
+ <label class="fl">名称 <span class="req">*</span></label><input class="inp" style="width:100%" value="${name||''}">
+ <label class="fl">Webhook 地址 <span class="req">*</span>（host 必须在白名单内）</label>
+ <input class="inp" style="width:100%" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…">
+ <label class="fl">加签密钥（钉钉必填 / 飞书可选 / 企微群机器人无需）</label><input class="inp" style="width:100%" type="password" placeholder="加密存储">
+ <div class="grid c2"><div><label class="fl">限流阈值</label><input class="inp" style="width:100%" value="20 条/分钟"></div>
+ <div><label class="fl">排队等待超时</label><input class="inp" style="width:100%" value="5 分钟"></div></div>
+ <div class="checkbox-line"><input type="checkbox"><span>标记为测试渠道（供测试发送选择，FR-TSK-02）</span></div>
+ <div class="hint mt8" id="ch-hint">企微：支持 text/markdown/image/file · 图片≤2MB · 文件≤20MB · media_id 3天(缓存2.4天)</div>`,
+ `<button class="btn" onclick="closeModal()">取消</button><button class="btn" onclick="toast('测试消息发送成功 · 200 OK')">发送测试</button><button class="btn pri" onclick="closeModal();toast('渠道已保存：白名单校验通过，凭据已加密')">保存</button>`)}
+function chTypeHint(){const m={WEWORK_BOT:'企微：支持 text/markdown/image/file · 图片≤2MB · 文件≤20MB · media_id 3天(缓存2.4天)',DINGTALK_BOT:'钉钉：text/markdown/图片/文件(经媒体上传) · timestamp+HmacSHA256 加签 · 限额以官方文档为准',FEISHU_BOT:'飞书：文本/富文本/图片(image_key)/文件 · 可选加签 · 限额以官方文档为准',EMAIL_SMTP:'邮件：SMTP主机/端口/SSL · 发件账号密码加密存储 · 附件总大小≤20MB · 收件人白名单强校验',GENERIC_WEBHOOK:'Webhook：POST 渲染结果 · Freemarker 请求体模板 · 自定义Header/BasicAuth · 目标URL受白名单管控'};$('#ch-hint').textContent=m[$('#ch-type').value]}
+
+/* ---- 执行日志 ---- */
+PAGES.exec=()=>{
+ return `<div class="page-title">执行日志</div><div class="page-sub">FR-EXE-05/06 · 全量落库，默认保留 180 天 · 产物按保留期可下载</div>
+ <div class="card">
+  <div class="toolbar">
+   <select class="inp"><option>全部任务</option>${TASKS.map(t=>`<option>${t.name}</option>`).join('')}</select>
+   <select class="inp"><option>全部状态</option>${Object.keys(EXEC_STATUS).map(s=>`<option>${EXEC_STATUS[s][0]}</option>`).join('')}</select>
+   <select class="inp"><option>全部触发方式</option><option>CRON</option><option>MANUAL</option><option>TEST</option><option>TRIAL</option><option>RETRY</option><option>API</option></select>
+   <input class="inp" type="date" value="2026-09-21"><span class="hint">至</span><input class="inp" type="date" value="2026-09-21">
+  </div>
+  ${tbl(['执行ID','任务','触发','状态','触发时间','bizDate','行数','耗时','版本','节点','操作'],EXECS.map(e=>[
+   `<span class="lnk mono" onclick="execDetail('${e.id}')">${e.id}</span>`,e.task,
+   `<span class="badge b-gray">${e.trig}</span>`,badge(e.status),e.fire,e.biz,e.rows,e.cost,e.ver,e.node,
+   `<span class="lnk" onclick="execDetail('${e.id}')">详情</span> · <span class="lnk" onclick="toast('重跑：以原版本快照+原参数写入新执行记录')">重跑</span>`]))}
+ </div>`;
+};
+function execDetail(id){
+ const e=EXECS.find(x=>x.id===id);if(!e)return;
+ const canSql=can('sqlView');
+ const stages=e.status==='WAIT_APPROVAL'
+  ?[['排队','0.4s','#96a1b3',8],['查询','2.1s','#3b6ef6',20],['渲染','12.6s','#7c3aed',60],['等待审核','进行中…','#d97706',12]]
+  :[['排队','0.3s','#96a1b3',4],['查询 ds1','2.3s','#3b6ef6',18],['渲染 A1/A2','9.7s','#7c3aed',30],['转图 A3','18.4s','#0ea5e9',38],['推送×2渠道','3.5s','#2ba471',10]];
+ drawer(`执行详情 · ${e.id}`,`
+ <div class="flex mb10">${badge(e.status)}<span class="badge b-gray">${e.trig}</span><span class="hint">任务：${e.task} · 版本 ${e.ver} · 节点 ${e.node}</span></div>
+ <div class="kv mb10">
+  <span class="k">触发时间</span><span>${e.fire}</span><span class="k">业务日期</span><span>${e.biz}</span>
+  <span class="k">生效参数</span><span class="mono">bizDate=${e.biz==='—'?'2026-09-20':e.biz} · branchId=100 · threshold=1000</span>
+  <span class="k">总耗时</span><span>${e.cost}</span><span class="k">数据行数</span><span>${e.rows}</span>
+ </div>
+ ${e.note?`<div class="card" style="background:#fafbfd;margin-bottom:12px"><span class="hint">${e.note}</span></div>`:''}
+ <div class="card" style="margin-bottom:12px"><div class="card-title">阶段时间线（FR-EXE-06）</div>
+  <div class="stage-bars">${stages.map(s=>`<div style="width:${s[3]}%;background:${s[2]}" title="${s[0]} ${s[1]}">${s[0]}</div>`).join('')}</div>
+  <div class="stage-legend">${stages.map(s=>`<span><i class="dot" style="background:${s[2]}"></i>${s[0]} ${s[1]}</span>`).join('')}</div>
+ </div>
+ ${e.err?`<div class="err-card"><span class="code">${e.err.code}</span> <b>${e.err.msg}</b><div class="fix">修复建议：${e.err.fix}</div></div>`:''}
+ ${e.fanout?`<div class="card mt14" style="margin-bottom:12px"><div class="card-title">FANOUT 子执行（${e.fanout.ok}/${e.fanout.total} 成功）</div>
+  <div class="hint">失败行：${e.fanout.failRow}</div><div class="flex mt8"><button class="btn sm" onclick="go('fanout')">父子视图</button><button class="btn sm pri" onclick="toast('仅重跑失败子执行已入队')">重跑失败行</button></div></div>`:''}
+ <div class="card mt14" style="margin-bottom:12px"><div class="card-title">产物</div>
+  ${tbl(['产物','类型','引擎','行数','大小','存储','操作'],[
+   ['A1 摘要','MARKDOWN','Freemarker','—','1.2KB','hp://oss-main/artifacts/2026/09/21/101/'+e.id.slice(-3)+'/a1.md','<span class="lnk" onclick="toast('下载（presignedUrl 5分钟有效）')">下载</span>'],
+   ['A2 明细','EXCEL','EasyExcel','1,284','214KB','hp://oss-main/…/a2.xlsx','<span class="lnk">下载</span>'],
+   ['A3 表格图','IMAGE','HTML_SHOT','200(截断)','486KB','hp://oss-main/…/a3.png','<span class="lnk">下载</span>']])}
+ </div>
+ <div class="card" style="margin-bottom:12px"><div class="card-title">渠道推送明细（幂等键：执行ID+渠道+产物）</div>
+  ${tbl(['渠道','产物→消息','状态','重试','错误'],[
+   ['销售一大群机器人','A1→markdown','<span class="badge b-ok">成功</span>','0','—'],
+   ['销售一大群机器人','A3→image','<span class="badge b-ok">成功</span>','0','—'],
+   ['管理层日报群','A2→file','<span class="badge b-ok">成功</span>','0','media_id 缓存命中'],
+   ...(e.err&&e.id==='E20260921002'?[['钉钉-华西部报表群','A1→markdown','<span class="badge b-fail">失败</span>','1/3','PUSH-011 限流等待超时']]:[])])}
+ </div>
+ ${canSql?`<div class="card"><div class="card-title">SQL 与审计</div>
+  <div class="code-box">SELECT branch_name, cust_name, amount, dt
+FROM sales_order
+WHERE dt = '2026-09-20' AND branch_id = 100   -- #{} 已绑定，审计存原文+参数</div>
+  <div class="hint mt8">scene=EXEC · 返回 1,284 行 · 耗时 2.3s · 操作者 exec:${e.id} · IP 10.20.8.5(node-2)</div></div>`
+ :`<div class="card"><div class="hint">VIEWER 角色不展示 SQL 原文、参数与数据源信息（FR-SEC-06）</div></div>`}`);
+}
+
+/* ---- 审计中心 ---- */
+let AUD_TAB=0;
+PAGES.audit=()=>{
+ if(!can('audit'))return `<div class="card"><div class="page-title">审计中心</div><div class="hint mt14">当前角色（${ROLES[ROLE]}）无权访问审计中心，仅 ADMIN 可查（权限矩阵 2.2）。</div></div>`;
+ return `<div class="page-title">审计中心</div><div class="page-sub">FR-SEC-03 / FR-SEC-04 · 只增不改 · SQL 审计保留180天</div>
+ <div class="card"><div class="tabs">
+  <div class="tab ${AUD_TAB===0?'on':''}" onclick="AUD_TAB=0;render()">SQL 审计</div>
+  <div class="tab ${AUD_TAB===1?'on':''}" onclick="AUD_TAB=1;render()">配置变更审计</div></div>
+ ${AUD_TAB===0?`<div class="toolbar"><input class="inp" placeholder="按操作人 / 数据源筛选" style="width:240px"><button class="btn sm" onclick="toast('导出 CSV（ADMIN）')">导出</button></div>
+  ${tbl(['时间','操作者','数据源','场景','行数','耗时','SQL 原文'],AUDIT_SQL.map(a=>[a.t,a.who,a.ds,`<span class="badge ${a.scene==='EXEC'?'b-run':'b-gray'}">${a.scene}</span>`,a.rows,a.cost,`<span class="mono" style="font-size:11.5px">${a.sql}</span>`]))}
+  <div class="hint mt8">不记录结果集内容（防止审计表成为二次泄露面）</div>`
+ :`<div class="toolbar"><select class="inp"><option>全部实体</option><option>数据源</option><option>任务</option><option>模板</option><option>渠道</option><option>白名单</option><option>用户</option></select></div>
+  ${tbl(['时间','操作人','实体','动作','字段级 diff（敏感字段仅记"已变更"）'],OPLOG.map(o=>[o.t,o.who,o.ent,`<span class="badge b-gray">${o.act}</span>`,`<span class="mono" style="font-size:12px">${o.diff}</span>`]))}`}
+ </div>`;
+};
+
+/* ---- 系统设置 ---- */
+PAGES.setting=()=>{
+ if(!can('setting'))return `<div class="card"><div class="page-title">系统设置</div><div class="hint mt14">当前角色（${ROLES[ROLE]}）无权访问系统设置。</div></div>`;
+ return `<div class="page-title">系统设置</div><div class="page-sub">仅 ADMIN · 全部变更写配置审计</div>
+ <div class="grid c2">
+ <div class="card"><div class="card-title">存储后端（FR-STO-01~04）</div>
+  ${tbl(['ID','类型','配置','用途','状态'],[
+   ['oss-main','S3兼容(OSS)','endpoint: oss-cn-chengdu… · bucket: hermes-prod','模板+产物','<span class="badge b-ok">默认</span>'],
+   ['minio-dev','S3兼容(MinIO)','endpoint: minio.internal:9000','开发环境','<span class="badge b-ok">启用</span>'],
+   ['local','本地磁盘','/data/hermes','临时+开发','<span class="badge b-warn">集群下警示</span>'],
+   ['hdfs-dw','HDFS(可选模块)','M5 交付 · Kerberos 待确认','归档','<span class="badge b-gray">未启用</span>'])}
+  <div class="hint mt8">逻辑 URI：hp://{storageId}/{path} · 产物保留期默认 90 天，可按后端/任务覆盖 · 模板版本永久保留</div></div>
+ <div class="card"><div class="card-title">平台参数</div>
+  <label class="fl">platformBaseUrl（消息回链 FR-CH-11）</label><input class="inp" style="width:100%" value="https://hermes.company.com">
+  <label class="fl">系统告警渠道（FR-ALR-04）</label><select class="inp" style="width:100%"><option>运维告警群(测试) + ops@company.com</option></select>
+  <label class="fl">调度时区</label><input class="inp" style="width:100%" value="Asia/Shanghai（固定，任务级时区列远期）">
+  <label class="fl">主密钥托管（开放问题1）</label><select class="inp" style="width:100%"><option>环境变量 HP_MASTER_KEY（当前）</option><option>启动参数</option><option>KMS</option></select></div>
+ <div class="card"><div class="card-title">配额治理（FR-OPS-03）</div>
+  ${tbl(['配额项','当前值','说明'],[
+   ['单用户任务数上限','50','达到上限拒绝新建'],['全局渲染并发上限','4','Chromium/LibreOffice 进程总并发'],
+   ['测试发送每日上限','20 / 用户','防止测试渠道被刷'],['FANOUT 子执行上限','200 / 次','防清单误配'],['单数据源连接池总量','40','所有任务共享上限']])}</div>
+ <div class="card"><div class="card-title">用户与角色（FR-SEC-02/05）</div>
+  ${tbl(['用户','角色','数据源授权','状态'],[
+   ['admin','ADMIN','全部','<span class="badge b-ok">正常</span>'],
+   ['王晓芸 wangxy','DEVELOPER','主业务库、报表汇总库','<span class="badge b-ok">正常</span>'],
+   ['李成 licheng','DEVELOPER','报表汇总库','<span class="badge b-ok">正常</span>'],
+   ['赵倩 zhaoqian','DEVELOPER','主业务库','<span class="badge b-warn">锁定至 11:32（5次失败）</span>'],
+   ['周敏 zhoumin','VIEWER','—','<span class="badge b-ok">正常</span>']])}
+  <div class="hint mt8">登录日志 · 敏感事件邮件通知（改密/锁定/白名单变更/授权变更）· 会话超时 8 小时</div></div>
+ <div class="card"><div class="card-title">错误码字典（FR-OPS-02）</div>
+  ${tbl(['错误码','用户可读解释','建议动作'],[
+   ['DS-002','数据源连接超时','检查数据源网络与账号状态，确认只读账号未过期'],
+   ['SQL-004','必填参数缺失','在手动触发弹窗补填，或为参数设置默认值'],
+   ['TPL-003','模板占位符引用了不存在的字段','核对数据集字段名与模板 {} 变量'],
+   ['RD-007','图片超出渠道大小限制','降低 DPI 或启用压缩，或改发文件'],
+   ['PUSH-011','机器人限流等待超时','错峰调度，或调高排队等待超时'],
+   ['PUSH-021','邮件地址被拒(550)','收件人不在白名单或地址无效，核对通讯录'],
+   ['SYS-005','渲染进程超时被强杀','检查模板复杂度与服务器负载，调高超时']])}</div>
+ </div>`;
+};
+
+/* ================= 渲染与登录 ================= */
+function render(){const f=PAGES[PAGE]||PAGES.dash;$('#content').innerHTML=f();}
+function doLogin(){
+ ROLE=document.querySelector('#role-switch .pill.on').dataset.role;
+ $('#login').style.display='none';$('#app').style.display='flex';
+ $('#whoami').textContent=ROLES[ROLE]+' · '+(ROLE==='ADMIN'?'admin':ROLE==='DEVELOPER'?'wangxy':'zhoumin');
+ $('#avatar').textContent=(ROLE==='ADMIN'?'A':ROLE==='DEVELOPER'?'王':'周');
+ PAGE='dash';renderNav();render();
+ toast('已以「'+ROLES[ROLE]+'」角色登录，权限矩阵按 2.2 节生效');
+}
+function logout(){location.reload()}
+document.querySelectorAll('#role-switch .pill').forEach(p=>p.onclick=()=>{
+ document.querySelectorAll('#role-switch .pill').forEach(x=>x.classList.remove('on'));p.classList.add('on')});
+</script>
+</body>
+</html>

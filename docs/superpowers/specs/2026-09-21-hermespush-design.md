@@ -123,12 +123,13 @@ Task（推送任务，task_type = REPORT | ALERT）
 | `hp_task_version` | 任务配置快照 | task_id, version_no, config_json, created_by, remark |
 | `hp_template` | 模板元信息 | name, type(EXCEL/MARKDOWN/HTML), latest_version_no |
 | `hp_template_version` | 模板版本 | template_id, version_no, storage_uri, checksum, size, created_by |
-| `hp_channel` | 推送渠道 | type(WEWORK_BOT/DINGTALK_BOT/FEISHU_BOT/EMAIL_SMTP/GENERIC_WEBHOOK), `config_cipher`, rate_limit, status |
-| `hp_task_exec` | 执行记录 | task_id, task_version_id, trigger_type, status, fire_time, biz_date, params_json, retry_count, next_retry_at, node_id, heartbeat_at, cost_ms, error_code, error_msg, **parent_exec_id, fanout_key**（M5） |
+| `hp_channel` | 推送渠道 | type(WEWORK_BOT/DINGTALK_BOT/FEISHU_BOT/EMAIL_SMTP/GENERIC_WEBHOOK), `config_cipher`, rate_limit, status, deleted（逻辑删除，评审修订） |
+| `hp_whitelist` | 白名单（评审修订新增） | type(WEBHOOK_HOST/EMAIL_DOMAIN/EMAIL_ADDRESS), value, status, created_by；保存与发送双重校验，删除前校验渠道引用 |
+| `hp_task_exec` | 执行记录 | task_id, task_version_id, trigger_type, status, fire_time, biz_date, params_json, retry_count, next_retry_at, node_id, heartbeat_at, cost_ms, error_code, error_msg, **idempotency_key, priority**（评审修订），**parent_exec_id, fanout_key**（M5）。调度防重唯一索引 `(task_id, fire_time, trigger_type, idempotency_key)`；API/手动触发幂等唯一约束 `(task_id, idempotency_key)`；FANOUT 子执行独立唯一键 `(parent_exec_id, fanout_key)` |
 | `hp_task_exec_artifact` | 产物记录 | exec_id, artifact_key, type, storage_uri, rows, bytes, render_provider, cost_ms |
-| `hp_task_exec_push` | 渠道推送记录 | exec_id, channel_id, artifact_key, msg_type, status, retry_count, error（唯一键 `(exec_id, channel_id, artifact_key)` 保证幂等；FANOUT 子执行各有独立 exec_id，天然隔离） |
+| `hp_task_exec_push` | 渠道推送记录 | exec_id, channel_id, artifact_key, msg_type, status, retry_count, error（幂等唯一键为四元组 `(exec_id, channel_id, artifact_key, msg_type)`，评审修订：支持同产物降级改发等多消息类型场景；重试复用原 exec_id，已成功组合天然跳过） |
 | `hp_sql_audit` | SQL 审计 | exec_id, operator_id, datasource_id, sql_text, params_json, rows, cost_ms, scene(PREVIEW/EXEC), client_ip |
-| `hp_alert_state` | ALERT 任务状态（M4） | task_id, state(OK/TRIGGERED), last_value, consecutive_count, last_transition_at |
+| `hp_alert_state` | ALERT 任务状态（M4） | task_id, task_version_id, state(OK/TRIGGERED), last_value, consecutive_count, last_transition_at（评审修订：计数与状态更新走乐观锁条件更新；任务版本变更时重置防抖计数） |
 | `hp_media_cache` | 企微/飞书素材缓存 | channel_id, file_md5, media_id, expire_at |
 | `hp_oplog` | 配置变更审计（M4） | entity_type, entity_id, operator_id, action, diff_json, client_ip, created_at |
 | `hp_alert_record` | 告警去重 | alert_key, last_sent_at |
@@ -183,6 +184,8 @@ public interface ArtifactRenderer {
 ```
 
 **RD-2 TEXT / MARKDOWN 渲染**　Freemarker 模板。可访问所有数据集：单值 `${ds1.rows[0].amount}`、循环 `<#list ds2.rows as r>`。提供格式化辅助函数（千分位、百分比、日期）。
+
+**RD-2b 模板沙箱（评审修订，阻塞级安全项，对应 PRD FR-RD-10，P0/M1）**　用户可上传的 Freemarker 模板（Markdown/HTML/Webhook 请求体）默认允许 `?new` 构造任意 Java 对象与 `?api` 方法调用，等同 RCE。强制配置：TemplateClassResolver = ALLOWS_NOTHING_RESOLVER、api_builtin_enabled = false、禁用 ObjectConstructor/Execute/JythonRuntime 等危险内建；模板上传与导入时静态扫描危险指令，命中拒绝入库；渲染超时保护默认 30s。所有用户模板渲染路径不得绕过沙箱。
 
 长度约束：企微 text 上限 2048 字节、markdown 上限 4096 字节；钉钉/飞书各有上限（实现时以各家官方文档复核，阈值配置化）。超长时按配置策略处理：截断加省略提示 / 自动降级为文件推送 / 失败。
 
@@ -264,7 +267,7 @@ public interface PushChannel {
 
 **PS-4 Webhook 域名白名单（安全，已确认）**　渠道 webhook 的 host 必须在白名单内（如 `qyapi.weixin.qq.com`、`oapi.dingtalk.com`、`open.feishu.cn`）。防有人配一个自己控制的地址把数据导出去。白名单只有 ADMIN 能改。渠道配置接口对非 ADMIN 角色脱敏展示 webhook。
 
-**PS-5 渠道级部分成功（已确认）**　一个任务推多个渠道时，逐渠道记录成败，执行状态可为 `PARTIAL_SUCCESS`。重试只重试失败渠道，靠 `hp_task_exec_push` 唯一键保证幂等，成功的直接跳过不重发。对标佐证：Metabase v0.50.x 重复发送 bug（#45622）。
+**PS-5 渠道级部分成功（已确认）**　一个任务推多个渠道时，逐渠道记录成败，执行状态可为 `PARTIAL_SUCCESS`。重试只重试失败渠道，靠 `hp_task_exec_push` 四元组唯一键 `(exec_id, channel_id, artifact_key, msg_type)` 保证幂等（评审修订：含消息类型维度），成功的直接跳过不重发。重试复用原执行 ID（评审修订：换新 ID 会使幂等键失效导致重发）。对标佐证：Metabase v0.50.x 重复发送 bug（#45622）。
 
 **PS-6 邮件渠道（M4，对标 EasySQLMail 主渠道）**
 
@@ -320,7 +323,7 @@ RUNNING ──► WAIT_APPROVAL ──► (批准) ──► 推送 ──► SU
 | RETRYABLE | 数据源连接失败、查询超时、机器人渠道 5xx、限流、素材上传失败、SMTP 连接失败、转图进程超时 | 是 |
 | NON_RETRYABLE | SQL 语法错误、模板解析失败、必填参数缺失、webhook 失效(40001)、图片超限、邮件地址被拒 | 否 |
 
-默认 3 次，指数退避 30s / 2min / 8min，次数与间隔任务级可配。
+默认 3 次，指数退避 30s / 2min / 8min，次数与间隔任务级可配。重试复用原执行记录（同一 exec_id，retry_count 自增，RETRY_WAIT 到期由巡检置回 PENDING 重新领取），next_retry_at 以数据库时间计算（评审修订：防节点时钟漂移）。
 
 **SC-5 空结果集策略（已确认）**　任务级配置：`SKIP`（不推送，记为成功并标注）/ `PUSH_PLACEHOLDER`（推送"今日无数据"提示）/ `FAIL`。判定口径：默认"所有数据集均为空"才算空，任务可指定以哪几个数据集为判定依据。对标：Metabase"Don't send if there's no results"。
 
@@ -328,7 +331,7 @@ RUNNING ──► WAIT_APPROVAL ──► (批准) ──► 推送 ──► SU
 
 告警不进重试队列，且必须**去重静默**：同一 `(task, error_code)` 在 30 分钟内只发一次（`hp_alert_record`）。对标：Superset Alert grace period + 日志去重。
 
-**SC-7 集群健壮性**　Worker 领取任务后写 `node_id` + 定期更新 `heartbeat_at`。巡检任务扫描"RUNNING 但心跳超时（默认 10min）"的记录，置为 FAILED 并触发重试。本地临时文件由巡检任务按 mtime 清理残留。
+**SC-7 集群健壮性**　Worker 领取任务后写 `node_id` + 每 30s 更新 `heartbeat_at`，心跳超时阈值 2min（评审修订：原 10min 恢复过慢）。竞态防护（评审修订）：巡检重置使用条件更新 `UPDATE ... SET status='FAILED' WHERE id=? AND status='RUNNING' AND heartbeat_at<?` 并校验影响行数；Worker 每次心跳后自检执行仍为 RUNNING，发现被重置立即放弃式退出，杜绝双 Worker 并发处理同一执行。本地临时文件由巡检任务按 mtime 清理残留。
 
 **SC-8 执行日志**　记录：触发方式、任务版本、业务日期、实际参数、SQL 原文、各数据集行数与耗时、各产物（类型、provider、大小、行数、存储 URI、耗时）、各渠道推送状态与错误、总耗时。产物可在界面直接下载。FANOUT 场景下父执行汇总 N 个子执行状态。
 
