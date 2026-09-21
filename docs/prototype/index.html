@@ -143,7 +143,7 @@ label.fl .req{color:var(--danger)}
 <div id="login">
   <div class="login-box">
     <h2>HermesPush</h2>
-    <div class="sub">智能数据推送平台 · 交互原型 v1.0（对应 PRD v1.0）</div>
+    <div class="sub">智能数据推送平台 · 交互原型 v1.2 · 默认简单模式（PRD 1.6 / FR-OPS-05）</div>
     <input class="inp" value="admin" id="login-user">
     <input class="inp" type="password" value="********" id="login-pwd">
     <div style="font-size:12.5px;color:var(--text-3)">选择体验角色（原型演示权限矩阵差异）</div>
@@ -166,6 +166,7 @@ label.fl .req{color:var(--danger)}
     <div id="topbar">
       <div class="crumb" id="crumb"></div>
       <div class="top-right">
+        <div class="pill-nav"><span class="pill on" id="mode-simple" onclick="setMode('simple')">简单模式</span><span class="pill" id="mode-full" onclick="setMode('full')">专家模式</span></div>
         <span class="env-tag">原型环境 · 仿真数据</span>
         <span style="color:var(--text-2);font-size:13px" id="whoami"></span>
         <div class="avatar" id="avatar" title="退出登录" onclick="logout()">A</div>
@@ -287,17 +288,132 @@ const NAV=[
  {g:'执行与审计',items:[{k:'exec',i:'⟳',n:'执行日志'},{k:'audit',i:'⚖',n:'审计中心'}]},
  {g:'系统',items:[{k:'setting',i:'⚙',n:'系统设置'}]},
 ];
-let PAGE='dash';
+let PAGE='home';
+let MODE='simple';
+const NAV_SIMPLE=[
+ {g:'',items:[{k:'home',i:'▦',n:'今日'},{k:'tasks',i:'☰',n:'推送任务'},{k:'ds',i:'⛁',n:'数据源'},{k:'tpl',i:'▤',n:'推送内容模板'},{k:'ch',i:'➤',n:'推送渠道'},{k:'exec',i:'⟳',n:'执行记录'}]},
+];
+const EXTRA_TITLES={home:'今日',scenarios:'新建推送任务',wizard3:'新建推送任务',dash:'今日概览'};
+function setMode(m){
+ MODE=m;PAGE=(m==='simple')?'home':'dash';
+ const a=document.getElementById('mode-simple'),b=document.getElementById('mode-full');
+ if(a)a.classList.toggle('on',m==='simple');if(b)b.classList.toggle('on',m==='full');
+ renderNav();render();
+ toast(m==='simple'?'已切到简单模式：只保留日常高频功能':'已切到专家模式：展示全部配置能力（含未交付里程碑演示项）');
+}
 function renderNav(){
-  $('#nav').innerHTML=NAV.map(g=>`<div class="nav-group">${g.g}</div>`+g.items.map(it=>
-    `<div class="nav-item ${PAGE===it.k?'active':''}" onclick="go('${it.k}')"><span class="ico">${it.i}</span>${it.n}</div>`).join('')).join('');
-  const all=NAV.flatMap(g=>g.items);const cur=all.find(x=>x.k===PAGE);
-  $('#crumb').innerHTML=`HermesPush / <b>${cur?cur.n:''}</b>`;
+ const nav=(MODE==='simple')?NAV_SIMPLE:NAV;
+ $('#nav').innerHTML=nav.map(g=>`${g.g?`<div class="nav-group">${g.g}</div>`:''}`+g.items.map(it=>
+   `<div class="nav-item ${PAGE===it.k?'active':''}" onclick="go('${it.k}')"><span class="ico">${it.i}</span>${it.n}</div>`).join('')).join('');
+ const all=nav.flatMap(g=>g.items);const cur=all.find(x=>x.k===PAGE);
+ $('#crumb').innerHTML=`HermesPush / <b>${cur?cur.n:(EXTRA_TITLES[PAGE]||'')}</b>${MODE==='full'?' <span class="hint">（专家模式）</span>':''}`;
 }
 function go(k){PAGE=k;renderNav();render();window.scrollTo(0,0)}
 
 /* ================= 页面 ================= */
 const PAGES={};
+
+/* ================= 简单模式（FR-OPS-05：默认极简路径） ================= */
+const SCEN=[
+ {k:'daily',n:'日报发群',d:'每天固定时间，把数据摘要和表格图发到微信群',inc:'摘要卡片 + 表格图片',time:'约 5 分钟',mile:''},
+ {k:'file',n:'明细附件',d:'每天自动生成 Excel 明细，发到群或邮箱',inc:'摘要卡片 + Excel 附件',time:'约 5 分钟',mile:''},
+ {k:'alert',n:'指标监控提醒',d:'数据超过阈值（如库存低于下限）时自动提醒群',inc:'提醒消息',time:'约 3 分钟',mile:'M4b'},
+ {k:'fanout',n:'按人分发',d:'一人一报：每个分公司经理只收到自己的数据',inc:'专属报表 + 水印',time:'约 10 分钟',mile:'M5'},
+];
+const SCEN_SQL={daily:"SELECT branch_name AS 分公司, SUM(amount) AS 成交额\nFROM sales_order\nWHERE dt = 昨天\nGROUP BY branch_name",file:"SELECT dt AS 日期, cust_name AS 客户, amount AS 金额\nFROM sales_order\nWHERE dt = 昨天"};
+let WZ3=0,SCEN_CUR=SCEN[0],WZ3DONE=false;
+
+PAGES.home=()=>{
+ const today=EXECS.filter(e=>e.fire.startsWith('今天'));
+ const ok=today.filter(e=>e.status==='SUCCESS').length;
+ const bad=today.filter(e=>['FAILED','TIMEOUT','PARTIAL_SUCCESS'].includes(e.status));
+ const next3=[['09:00','销售日报','发到：销售一大群'],['09:15','物流时效日报','发到：钉钉-华西部报表群'],['10:00','回款进展提醒','发到：管理层日报群']];
+ return `
+ <div class="page-title">今日</div>
+ <div class="page-sub">简单模式只展示日常高频功能；完整配置请点右上角"专家模式"</div>
+ <div class="stat-strip">
+  <div class="cell"><div class="v">${today.length}</div><div class="l">今天已推送</div></div>
+  <div class="cell"><div class="v" style="color:var(--success)">${ok}</div><div class="l">成功</div></div>
+  <div class="cell"><div class="v" style="color:${bad.length?'var(--danger)':'var(--text-3)'}">${bad.length}</div><div class="l">有问题</div></div>
+  <div class="cell"><div class="v">${TASKS.filter(t=>t.status==='已上线').length}</div><div class="l">进行中的任务</div></div>
+ </div>
+ ${bad.length?`<div class="card" style="border-left:4px solid var(--danger)"><b>${bad.length} 个推送有问题，需要处理</b><div class="hint mt8">${bad.map(e=>`${e.task}（${e.err?e.err.code:'部分渠道失败'}）`).join('、')}</div><button class="btn sm mt8" onclick="go('exec')">查看原因和处理建议</button></div>`:''}
+ <div class="grid side">
+  <div class="card"><div class="card-title">接下来要推送的</div>
+   <div class="tl">${next3.map(u=>`<div class="tl-item"><b>${u[0]}</b>　${u[1]}<div class="tl-t">${u[2]}</div></div>`).join('')}</div>
+  </div>
+  <div class="card"><div class="card-title">快速开始</div>
+   <button class="btn pri" style="width:100%;justify-content:center;margin-bottom:10px" onclick="go('scenarios')">＋ 新建推送任务（从场景选，约 5 分钟）</button>
+   <button class="btn" style="width:100%;justify-content:center;margin-bottom:10px" onclick="go('exec')">查看执行记录</button>
+   <button class="btn" style="width:100%;justify-content:center" onclick="setMode('full')">编辑任务高级配置（专家模式）</button>
+  </div>
+ </div>
+ <div class="card"><div class="card-title">我的推送任务</div>
+  ${tbl(['任务','状态','下次推送','操作'],TASKS.filter(t=>t.type==='REPORT'&&t.status!=='已下线').slice(0,5).map(t=>[
+   t.name,
+   t.status==='已上线'?'<span class="badge b-ok">进行中</span>':t.status==='草稿'?'<span class="badge b-gray">还没上线</span>':`<span class="badge b-warn">${t.status}</span>`,
+   t.next,
+   `<span class="lnk" onclick="toast('简单模式支持：手动补发 / 暂停 / 上线。完整编辑请切专家模式')">管理</span>`]))}
+ </div>`;
+};
+
+PAGES.scenarios=()=>`
+ <div class="page-title">新建推送任务</div>
+ <div class="page-sub">选一个最接近的场景：配置已帮你带好，只需要改查询语句和选群</div>
+ <div class="grid c2">
+ ${SCEN.map(s=>`<div class="card" style="margin:0;cursor:pointer${s.mile?';opacity:.72':''}" onclick="startScen('${s.k}')">
+  <div class="spread"><b style="font-size:16px">${s.n}</b>${s.mile?`<span class="badge b-warn">${s.mile} 交付 · 原型演示</span>`:'<span class="badge b-ok">可用</span>'}</div>
+  <div class="hint mt8" style="font-size:13px">${s.d}</div>
+  <div class="mt14 hint">包含：${s.inc} · 配置耗时 ${s.time}</div></div>`).join('')}
+ </div>
+ <div class="card mt14" style="cursor:pointer" onclick="setMode('full');go('wizard')">
+  <b>自定义（专家）</b><div class="hint mt8">完整五步向导：多数据查询、PDF、水印、行数上限、锁定版本、高级调度策略等全部配置项</div></div>`;
+
+function startScen(k){
+ if(k==='alert'){toast('指标监控提醒随 M4b 交付，演示页展示提醒任务与状态');go('alerts');return}
+ if(k==='fanout'){toast('按人分发随 M5 交付，演示页展示分发清单配置');go('fanout');return}
+ SCEN_CUR=SCEN.find(x=>x.k===k);WZ3=0;WZ3DONE=false;go('wizard3');
+}
+PAGES.wizard3=()=>{
+ const lbs=['查数据','推送内容','群和时间'];
+ const done=WZ3DONE;
+ const steps=`<div class="steps">${lbs.map((l,i)=>`${i>0?'<div class="bar" style="flex:1;height:1px;background:var(--border);align-self:center"></div>':''}<div class="step ${done||WZ3>i?'done':WZ3===i?'on':''}" ${done?'':`onclick="WZ3=${i};render()"`}><span class="num">${done||WZ3>i?'✓':i+1}</span><span class="lb">${l}</span></div>`).join('')}</div>`;
+ if(done)return `<div class="page-title">配置好了，确认一下</div>${steps}
+ <div class="card">
+  <div class="md-preview" style="font-size:14.5px;line-height:2">每天 <b>09:00</b>，从 <b>主业务库</b> 查询<b>昨天</b>的数据，生成<b>${SCEN_CUR.k==='file'?'摘要卡片和 Excel 附件':'摘要卡片和表格图片'}</b>，发到 <b>销售一大群</b>。<br>查不到数据时这次不推送；发送失败会自动重试 3 次，还不行会通知管理员。</div>
+  <div class="flex mt14">
+   <button class="btn" onclick="toast('已发到测试群，消息带[测试]前缀，去群里看看效果')">发到测试群看看效果</button>
+   <button class="btn pri" onclick="toast('任务已上线！明早 9 点自动推送，结果可在「执行记录」查看');WZ3DONE=false;go('home')">上线</button>
+   <span class="hint">上线后可随时暂停、修改或手动补发</span>
+  </div>
+ </div>`;
+ const body=[w3sql,w3content,w3target][WZ3]();
+ return `<div class="spread mb10"><div><div class="page-title">新建「${SCEN_CUR.n}」任务</div><div class="page-sub">场景已带好默认配置，改两处就能用：你的查询语句、发到哪个群</div></div>
+ <div class="flex"><button class="btn sm" ${WZ3===0?'disabled':''} onclick="WZ3--;render()">上一步</button>
+ <button class="btn pri sm" onclick="${WZ3===2?'WZ3DONE=true;render()':'WZ3++;render()'}">${WZ3===2?'完成配置':'下一步'}</button></div></div>
+ ${steps}<div class="card">${body}</div>`;
+};
+function w3sql(){return `
+ <label class="fl">从哪个库查 <span class="req">*</span></label>
+ <select class="inp" style="width:320px">${DS.filter(d=>d.status==='启用').map(d=>`<option>${d.name}</option>`).join('')}</select>
+ <label class="fl">查询语句 <span class="req">*</span></label>
+ <div class="code-box" contenteditable="true" style="min-height:90px">${SCEN_SQL[SCEN_CUR.k]||SCEN_SQL.daily}</div>
+ <div class="hint mt8">写"昨天"的位置，系统每天自动换成对应日期；只允许查询语句，删改数据的语句会被直接拒绝</div>
+ <div class="flex mt14"><button class="btn sm pri" onclick="toast('已查到 26 行数据，两列：分公司 / 成交额（最多预览前 200 行）')">▶ 先看看查出来的数据</button></div>`;}
+function w3content(){const c=SCEN_CUR.k==='file'?['card','xls']:['card','img'];return `
+ <label class="fl">要推送哪些内容（可多选）</label>
+ <div class="grid c3">
+  <div class="card" style="margin:0"><div class="checkbox-line" style="margin-top:0"><input type="checkbox" ${c.includes('card')?'checked':''}><b>摘要卡片</b></div><div class="hint mt8">把关键数字写成一段群消息，打开手机就能看</div></div>
+  <div class="card" style="margin:0"><div class="checkbox-line" style="margin-top:0"><input type="checkbox" ${c.includes('img')?'checked':''}><b>表格图片</b></div><div class="hint mt8">数据做成一张图，不用下载文件；太长会自动截断并注明</div></div>
+  <div class="card" style="margin:0"><div class="checkbox-line" style="margin-top:0"><input type="checkbox" ${c.includes('xls')?'checked':''}><b>Excel 附件</b></div><div class="hint mt8">完整明细做成 .xlsx 文件发出去</div></div>
+ </div>
+ <div class="hint mt14">需要 PDF、水印、公司自己的 Excel 模板？切到右上角"专家模式"配置</div>`;}
+function w3target(){return `
+ <label class="fl">发到哪个群 <span class="req">*</span></label>
+ ${CH.filter(x=>x.type==='WEWORK_BOT').map((c,i)=>`<div class="checkbox-line"><input type="checkbox" ${i===0?'checked':''}><span>${c.name}${c.test?'（测试群）':''}</span></div>`).join('')}
+ <label class="fl">什么时间发 <span class="req">*</span></label>
+ <div class="pill-nav"><span class="pill on">每天 09:00</span><span class="pill">每天 08:30</span><span class="pill">工作日 18:00</span><span class="pill">每周一 09:00</span><span class="pill" onclick="toast('自定义调度周期请在专家模式配置')">自定义…</span></div>
+ <div class="hint mt8">数据日期默认取昨天；查不到数据时默认这次不推送（可在专家模式改为提示"今日无数据"）</div>`;}
 
 /* ---- 今日概览 ---- */
 PAGES.dash=()=>{
@@ -343,7 +459,7 @@ PAGES.tasks=()=>{
  ]);
  return `<div class="spread mb10"><div><div class="page-title">任务列表</div><div class="page-sub">FR-TSK-01~09 · 共 ${TASKS.length} 个任务（原型演示数据）</div></div>
   <div class="flex">${can('taskEdit')?`<button class="btn" onclick="toast('批量操作：已选中 0 项（FR-TSK-08，单次上限50）')">批量操作</button><button class="btn" onclick="toast('导出 JSON：含任务快照与模板文件，不含凭据（FR-TSK-09）')">导出配置</button><button class="btn" onclick="toast('请选择导出的 JSON 文件（FR-TSK-09）')">导入配置</button>`:''}
-  <button class="btn pri" onclick="go('wizard')">＋ 新建任务</button></div></div>
+  <button class="btn pri" onclick="go(MODE==='simple'?'scenarios':'wizard')">＋ 新建任务</button></div></div>
  <div class="card">
   <div class="toolbar">
    <input class="inp" placeholder="搜索任务名 / key" style="width:220px">
@@ -407,7 +523,7 @@ PAGES.wizard=()=>{
   ${i>0?'<div class="bar" style="flex:1;height:1px;background:var(--border);align-self:center"></div>':''}
   <div class="step ${WZ===i?'on':WZ>i?'done':''}" onclick="WZ=${i};render()"><span class="num">${WZ>i?'✓':i+1}</span><span class="lb">${l}</span></div>`).join('')}</div>`;
  const body=[wizDs,wizArt,wizCh,wizSched,wizTrial][WZ]();
- return `<div class="spread mb10"><div><div class="page-title">新建推送任务（五步向导）</div><div class="page-sub">FR-TSK-01 · 各步支持保存草稿 · 首次上线前必须完成试运行（FR-TSK-02）</div></div>
+ return `<div class="spread mb10"><div><div class="page-title">新建推送任务（五步向导）</div><div class="page-sub">专家模式（FR-TSK-01）· 简单路径请用「场景模板」· 首次上线前必须完成试运行（FR-TSK-02）</div></div>
   <div class="flex"><button class="btn sm" onclick="toast('草稿已保存')">保存草稿</button>
   <button class="btn sm" ${WZ===0?'disabled':''} onclick="WZ--;render()">上一步</button>
   <button class="btn pri sm" onclick="${WZ===4?`toast('上线校验：未试运行任务不可上线（本例已试运行，上线成功）')`:`WZ++;render()`}">${WZ===4?'完成并上线':'下一步'}</button></div></div>
@@ -483,12 +599,15 @@ function wizSched(){return `
  <label class="fl">空结果集策略（FR-TSK-07）</label>
  <div class="pill-nav"><span class="pill on">SKIP 跳过不推送</span><span class="pill">PUSH_PLACEHOLDER 推送“今日无数据”</span><span class="pill">FAIL 记为失败</span></div>
  <div class="hint mt8">判定口径：全部数据集均无行（可指定以 ds1 为准）</div>
- <label class="fl">数据就绪预检（FR-EXE-09，可选）</label>
- <div class="checkbox-line"><input type="checkbox"><span>启用：探测 SQL 满足条件后才执行，否则 30 分钟窗口内每 5 分钟轮询；窗口耗尽放弃本次执行</span></div>
- <label class="fl">审核策略（FR-TSK-10，M5）</label>
- <select class="inp" style="width:320px"><option>免审核（默认）</option><option>指定审核人（渲染完成后进入 WAIT_APPROVAL）</option></select>
- <label class="fl">个性化分发 FANOUT（FR-FAN-01，M5）</label>
- <select class="inp" style="width:320px"><option>不启用</option><option>静态清单</option><option>清单 SQL</option></select>`;}
+ <details class="mt14" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+  <summary style="cursor:pointer;color:var(--text-2);font-size:13.5px">高级（默认收起：数据就绪预检 / 审核策略 / 按人分发，收起时使用系统默认值）</summary>
+  <label class="fl">数据就绪预检（FR-EXE-09，可选）</label>
+  <div class="checkbox-line"><input type="checkbox"><span>启用：探测 SQL 满足条件后才执行，否则 30 分钟窗口内每 5 分钟轮询；窗口耗尽放弃本次执行</span></div>
+  <label class="fl">审核策略（FR-TSK-10，M5）</label>
+  <select class="inp" style="width:320px"><option>免审核（默认）</option><option>指定审核人（渲染完成后进入 WAIT_APPROVAL）</option></select>
+  <label class="fl">个性化分发 FANOUT（FR-FAN-01，M5）</label>
+  <select class="inp" style="width:320px"><option>不启用</option><option>静态清单</option><option>清单 SQL</option></select>
+ </details>`;}
 function wizTrial(){return `
  <b>第 5 步 · 试运行与测试发送（FR-TSK-02）</b>
  <div class="flex mt14"><button class="btn pri sm" onclick="toast('试运行完成：ds1 1,284行/2.3s，产物 A1-A4 渲染成功')">▶ 执行试运行（查询+渲染，不推送）</button>
@@ -806,8 +925,8 @@ function doLogin(){
  $('#login').style.display='none';$('#app').style.display='flex';
  $('#whoami').textContent=ROLES[ROLE]+' · '+(ROLE==='ADMIN'?'admin':ROLE==='DEVELOPER'?'wangxy':'zhoumin');
  $('#avatar').textContent=(ROLE==='ADMIN'?'A':ROLE==='DEVELOPER'?'王':'周');
- PAGE='dash';renderNav();render();
- toast('已以「'+ROLES[ROLE]+'」角色登录，权限矩阵按 2.2 节生效');
+ PAGE=(MODE==='simple')?'home':'dash';renderNav();render();
+ toast('已以「'+ROLES[ROLE]+'」角色登录（简单模式，可切专家模式）');
 }
 function logout(){location.reload()}
 document.querySelectorAll('#role-switch .pill').forEach(p=>p.onclick=()=>{
