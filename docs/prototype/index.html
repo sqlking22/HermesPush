@@ -431,7 +431,7 @@ WHERE dt = #{bizDate}
   ${tbl(['参数','类型','来源','必填','文本替换','白名单/正则'],[
    ['bizDate','日期','时间变量(偏移-1d)','是','否','—'],
    ['branchId','整数','任务静态参数=100，可被手动触发/清单行覆盖','是','否','—'],
-   ['weekTag','字符串','静态参数','否','<span class="badge b-warn">已启用</span>','<span class="mono">^\\\\d{4}W\\\\d{2}$</span>'])]}
+   ['weekTag','字符串','静态参数','否','<span class="badge b-warn">已启用</span>','<span class="mono">^\\d{4}W\\d{2}$</span>']])}
  </div>`;}
 function wizArt(){return `
  <div class="spread mb10"><b>第 2 步 · 产物（Artifact）</b><button class="btn sm" onclick="toast('已添加产物（上限10个）')">＋ 添加产物</button></div>
@@ -439,7 +439,7 @@ function wizArt(){return `
   ['A1 摘要','<span class="badge b-run">MARKDOWN</span>','销售日报摘要.md <span class="hint">v6 ▾（可固版）</span>','超长策略：截断加提示','<span class="lnk">编辑</span>'],
   ['A2 明细','<span class="badge b-ok">EXCEL</span>','销售明细导出模板.xlsx <span class="hint">v11 ▾</span>','分批填充(>10000行)','<span class="lnk">编辑</span>'],
   ['A3 表格图','<span class="badge b-warn">IMAGE</span>','source=HTML模板 · KPI看板.html <span class="hint">引擎: HTML_SHOT(默认)</span>','行数上限200 · 超限:TRUNCATE_TOP_N · 水印:开','<span class="lnk">编辑</span>'],
-  ['A4 归档PDF','<span class="badge b-part">PDF</span>','source=HTML模板 · KPI看板.html <span class="hint">引擎: HTML_PRINT</span>','页眉页脚 · A4','<span class="lnk">编辑</span>'])}
+  ['A4 归档PDF','<span class="badge b-part">PDF</span>','source=HTML模板 · KPI看板.html <span class="hint">引擎: HTML_PRINT</span>','页眉页脚 · A4','<span class="lnk">编辑</span>']])}
  <div class="card mt14" style="background:#fafbfd"><b>产物 A3 配置（IMAGE）</b>
   <label class="fl">source</label>
   <div class="pill-nav"><span class="pill on">HTML 模板（网页截图路线，业界主流）</span><span class="pill">引用 EXCEL 产物（文件转图路线）</span></div>
@@ -459,7 +459,7 @@ function wizArt(){return `
 function wizCh(){return `
  <div class="spread mb10"><b>第 3 步 · 渠道绑定</b><span class="hint">为每个渠道勾选要发送的产物与消息类型（渠道级部分成功 FR-CH-06）</span></div>
  ${tbl(['渠道','类型','产物 → 消息类型','@成员','操作'],[
-  ['销售一大群机器人','企微机器人','A1→markdown · A3→image','—','<span class="lnk danger" onclick="toast(\\'已解绑\\')">解绑</span>'],
+  ['销售一大群机器人','企微机器人','A1→markdown · A3→image','—','<span class="lnk danger" onclick="toast(\'已解绑\')">解绑</span>'],
   ['管理层日报群','企微机器人','A1→markdown · A2→file · A4→(邮件转发)','—','<span class="lnk danger">解绑</span>'],
   ['公司邮件网关','邮件','正文=A1(HTML化) · 附件=A2,A4','—','<span class="lnk danger">解绑</span>']])}
  <button class="btn sm mt14" onclick="toast('从渠道列表选择（仅显示启用渠道；webhook 白名单校验在渠道侧完成）')">＋ 绑定渠道</button>
@@ -631,7 +631,7 @@ function dsForm(name){modal(name?'编辑数据源 · '+name:'新增数据源',`
 /* ---- 模板库 ---- */
 PAGES.tpl=()=>`
  <div class="spread mb10"><div><div class="page-title">模板库</div><div class="page-sub">FR-TPL-01~05 · 三类模板：EXCEL(.xlsx≤20MB) / MARKDOWN(.md≤256KB) / HTML(.html|.ftl≤256KB) · 每次上传生成新版本，历史不可变</div></div>
- ${can('tplEdit')?'<button class="btn pri" onclick="toast('上传弹窗：选择类型 → 拖拽文件 → 校验扩展名与文件头 → 填写版本备注')">⬆ 上传模板</button>':''}</div>
+ ${can('tplEdit')?`<button class="btn pri" onclick="toast('上传弹窗：选择类型 → 拖拽文件 → 校验扩展名与文件头 → 填写版本备注')">⬆ 上传模板</button>`:''}</div>
  <div class="card"><div class="card-title">预置模板库（FR-TPL-04）</div>
   <div class="grid c3">${TPL.filter(t=>t.preset).map(t=>`<div class="card" style="margin:0;background:#fafbfd"><b>${t.name}</b><div class="hint mt8">${t.type} · 系统内置</div>
    <div class="flex mt8"><button class="btn sm" onclick="toast('已复制为我的模板')">复制使用</button><button class="btn sm" onclick="toast('已用该模板创建任务骨架（含样例数据集）')">一键建任务</button></div></div>`).join('')}</div>
@@ -723,7 +723,7 @@ function execDetail(id){
   <div class="hint">失败行：${e.fanout.failRow}</div><div class="flex mt8"><button class="btn sm" onclick="go('fanout')">父子视图</button><button class="btn sm pri" onclick="toast('仅重跑失败子执行已入队')">重跑失败行</button></div></div>`:''}
  <div class="card mt14" style="margin-bottom:12px"><div class="card-title">产物</div>
   ${tbl(['产物','类型','引擎','行数','大小','存储','操作'],[
-   ['A1 摘要','MARKDOWN','Freemarker','—','1.2KB','hp://oss-main/artifacts/2026/09/21/101/'+e.id.slice(-3)+'/a1.md','<span class="lnk" onclick="toast('下载（presignedUrl 5分钟有效）')">下载</span>'],
+   ['A1 摘要','MARKDOWN','Freemarker','—','1.2KB','hp://oss-main/artifacts/2026/09/21/101/'+e.id.slice(-3)+'/a1.md',`<span class="lnk" onclick="toast('下载（presignedUrl 5分钟有效）')">下载</span>`],
    ['A2 明细','EXCEL','EasyExcel','1,284','214KB','hp://oss-main/…/a2.xlsx','<span class="lnk">下载</span>'],
    ['A3 表格图','IMAGE','HTML_SHOT','200(截断)','486KB','hp://oss-main/…/a3.png','<span class="lnk">下载</span>']])}
  </div>
@@ -768,7 +768,7 @@ PAGES.setting=()=>{
    ['oss-main','S3兼容(OSS)','endpoint: oss-cn-chengdu… · bucket: hermes-prod','模板+产物','<span class="badge b-ok">默认</span>'],
    ['minio-dev','S3兼容(MinIO)','endpoint: minio.internal:9000','开发环境','<span class="badge b-ok">启用</span>'],
    ['local','本地磁盘','/data/hermes','临时+开发','<span class="badge b-warn">集群下警示</span>'],
-   ['hdfs-dw','HDFS(可选模块)','M5 交付 · Kerberos 待确认','归档','<span class="badge b-gray">未启用</span>'])}
+   ['hdfs-dw','HDFS(可选模块)','M5 交付 · Kerberos 待确认','归档','<span class="badge b-gray">未启用</span>']])}
   <div class="hint mt8">逻辑 URI：hp://{storageId}/{path} · 产物保留期默认 90 天，可按后端/任务覆盖 · 模板版本永久保留</div></div>
  <div class="card"><div class="card-title">平台参数</div>
   <label class="fl">platformBaseUrl（消息回链 FR-CH-11）</label><input class="inp" style="width:100%" value="https://hermes.company.com">
