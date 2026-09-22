@@ -201,7 +201,7 @@ public interface ArtifactRenderer {
 |---|---|---|---|
 | `HTML_SHOT`（**默认**） | 引用数据集 | Freemarker **HTML 模板** | 业界主流路线（Superset/datart/Metabase/Redash 均为此路线），样式 100% 可控 |
 | `LIBREOFFICE` | 引用一个 EXCEL 产物 | .xlsx | 与 Aspose 纯配置开关互换，零额外模板，还原度需 spike 验证 |
-| `ASPOSE` | 引用一个 EXCEL 产物 | .xlsx | 同上，需商业 License，无 License 时不注册、界面置灰 |
+| `ASPOSE` | 引用一个 EXCEL 产物 | .xlsx | 同上；使用公司已有 aspose-cells-18.9.jar（2018 版），License 文件加载失败或 JDK 21 兼容 spike 不通过时不注册、界面置灰；仅渲染平台受控模板，CVE 攻击面受限 |
 
 设计上：`IMAGE` 产物有 `source` 字段（`ARTIFACT_REF` / `HTML_TEMPLATE`）。`ARTIFACT_REF` 路径下的 provider 由全局配置 + 产物级覆盖决定。
 
@@ -380,7 +380,7 @@ public interface FileStorage {
 |---|---|---|
 | LOCAL | 本地磁盘 | 集群下仅适合开发环境，界面警示 |
 | S3 | AWS S3 SDK v2 | **阿里云 OSS 与 MinIO 统一走 S3 兼容协议** |
-| HDFS | Hadoop Client | **独立可选模块**（M5），按条件加载 |
+| HDFS | Hadoop Client 3.2.x | **独立可选模块**（M5），按条件加载；目标集群自建 Hadoop 3.2.4、无 Kerberos（simple 认证）；旧版 Jackson/Guava 传递依赖需排除并 shade（或用 hadoop-client-runtime），避免与 Spring Boot 3 冲突 |
 
 **ST-4 路径规范**
 ```
@@ -635,14 +635,14 @@ Sa-Token RBAC · 数据源级授权 · SQL 审计查询页 · **配置变更审�
 
 ## 十、风险与待确认事项
 
-### 开放问题（需业务方确认）
+### 开放问题（2026-09-22 全部答复，详见 PRD v1.3 第 10 章）
 
-| # | 问题 | 影响 |
+| # | 问题 | 答复 |
 |---|---|---|
-| 1 | **AES-GCM 主密钥放哪**：环境变量 / 启动参数 / KMS？ | 阻塞 M1 |
-| 2 | **Aspose 是否已有商业 License**？没有则 M3 只交付 HTML_SHOT + LibreOffice | 影响 M3 范围 |
-| 3 | **HDFS 是否启用 Kerberos**？启用则需 keytab 管理方案 | 影响 M5 |
-| 4 | 部署方式：物理机 / K8s 容器？容器化需把 Chromium、中文字体、LibreOffice 打进镜像（体积约 1GB+），或转图走独立 renderer 服务 | 影响 M3 交付形态 |
+| 1 | AES-GCM 主密钥托管 | 环境变量 `HP_MASTER_KEY`（无 KMS），systemd/env 文件权限 600，禁入日志与 shell history |
+| 2 | Aspose License | 已有 aspose-cells-18.9.jar；License 文件需随 jar 确认提供；JDK 21 兼容 spike 不通过则不注册该 provider |
+| 3 | HDFS Kerberos | 未启用；自建 Apache Hadoop 3.2.4，simple 认证；客户端版本对齐 3.2.x，注意旧版 Jackson/Guava 与 Spring Boot 3 冲突（排除+shade 或 hadoop-client-runtime） |
+| 4 | 部署形态 | 虚拟机或 Docker 双支持；Docker 镜像含渲染依赖约 1.5GB，容器内 Chromium 配 /dev/shm ≥1GB 与沙箱参数 |
 
 ~~5. IMAGE 默认 provider~~ → 已确认 HTML_SHOT（9.3）。
 ~~6. 渠道/ALERT/FANOUT/PDF/水印/审核范围~~ → 已确认（三、四、八节）。

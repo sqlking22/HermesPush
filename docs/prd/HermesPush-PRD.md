@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 |---|---|
 | 文档编号 | HP-PRD-2026-001 |
-| 版本 | v1.2 |
-| 日期 | 2026-09-21 |
-| 状态 | 用户试用反馈"功能复杂不会用"后修订：新增渐进披露设计原则与双模式 FR，待业务方终审 |
+| 版本 | v1.3 |
+| 日期 | 2026-09-22 |
+| 状态 | 4 个开放问题已全部答复并落入正文（主密钥=环境变量、Aspose=已有 18.9 jar、HDFS=无 Kerberos/Hadoop 3.2.4、部署=VM 或 Docker），待业务方终审 |
 | 关联文档 | 技术设计说明 `docs/superpowers/specs/2026-09-21-hermespush-design.md`；交互原型 `docs/prototype/index.html`；评审记录 `docs/prd/HermesPush-PRD-评审记录.md` |
 
 ## 修订记录
@@ -18,6 +18,7 @@
 | v1.0 | 2026-09-21 | 产品复核后合并 14 项补充需求（试运行沙箱、错误码字典、配置导出导入、入站触发 API、数据就绪预检、消息回链、今日概览、预置模板库、通讯录、批量操作、配额治理、时区约定、成功指标、用户画像），按 PRD 规范重组全文 |
 | v1.1 | 2026-09-21 | 合并架构师评审（20 条）与开发专家评审（31 条）意见。主要修订：重试模型改为复用原执行记录；推送幂等键增加消息类型维度；心跳巡检加条件更新防竞态；Freemarker 模板沙箱（防 RCE）；钉钉与飞书机器人消息能力标注待验证并给降级设计；执行队列增加优先级与数据库统一时间；Quartz misfire 策略；M4 拆分为 M4a/M4b；RBAC 与数据源授权提前至 M2；补全约 25 处边界条件与术语歧义。逐条处置见评审记录文档 |
 | v1.2 | 2026-09-21 | 用户试用原型后反馈"功能太复杂、不知道怎么使用"，与成功指标"10 分钟配好任务"冲突。修订：新增 1.6 渐进披露设计原则（一级原则）；新增 FR-OPS-05 双模式与场景模板（P0/M1）；FR-TSK-01 五步向导划归专家模式；界面术语对照表；原型重构为简单模式默认 |
+| v1.3 | 2026-09-22 | 开放问题 1-4 全部答复：主密钥用环境变量（FR-SEC-01 细化注入与防护要求）；Aspose 已有 aspose-cells-18.9.jar（FR-RD-04 补 License 文件前提、JDK 21 兼容 spike、老版本 CVE 缓解）；HDFS 无 Kerberos、自建 Apache Hadoop 3.2.4（FR-STO-04 补客户端版本对齐与 Spring Boot 3 依赖冲突处置）；部署形态 VM 或 Docker 双支持（1.5 节补容器化要点）。M1 开工阻塞解除 |
 
 优先级定义：P0 必备，缺失则版本不可交付；P1 重要，原则上随所属里程碑交付；P2 增值，资源允许时交付，可顺延。
 
@@ -80,7 +81,9 @@ HermesPush 是企业内部的数据推送平台。管理员接入数据源并授
 
 ### 1.5 运行环境
 
-多节点集群部署。元数据库 MySQL 8.0（`SKIP LOCKED` 语法为硬性依赖），缓存与分布式锁依赖 Redis。对象存储支持阿里云 OSS、MinIO（统一走 S3 兼容协议），HDFS 为可选模块。图片与 PDF 渲染依赖 Chromium（Playwright 驱动），Excel 转图路线依赖 LibreOffice，中文字体必须随环境安装（统一字体清单以 Noto Sans CJK 为基准，开发与生产环境安装同款，规避跨平台渲染差异）。调度时区统一为 Asia/Shanghai，任务级时区配置列入远期。集群内所有调度与执行时间戳统一取数据库服务器时间，不信任应用节点本地时钟。
+多节点集群部署，部署形态为虚拟机或 Docker 容器（已确认，两者等效支持）。虚拟机路径提供部署手册（安装 Chromium、LibreOffice、Noto Sans CJK 字体的分步命令）；Docker 路径提供含渲染依赖的镜像（预计体积约 1.5GB），容器内 Chromium 需配置足够 `/dev/shm`（建议 ≥1GB）与沙箱参数（`--no-sandbox` 或 seccomp profile），LibreOffice profile 目录挂可写卷。转图拆独立 renderer 镜像/服务仍为演进路径，v1 单镜像交付。
+
+元数据库 MySQL 8.0（`SKIP LOCKED` 语法为硬性依赖），缓存与分布式锁依赖 Redis。对象存储支持阿里云 OSS、MinIO（统一走 S3 兼容协议），HDFS 为可选模块（自建 Apache Hadoop 3.2.4，无 Kerberos）。图片与 PDF 渲染依赖 Chromium（Playwright 驱动），Excel 转图路线依赖 LibreOffice 与 Aspose（已有 18.9 授权 jar），中文字体必须随环境安装（统一字体清单以 Noto Sans CJK 为基准，开发与生产环境安装同款，规避跨平台渲染差异）。调度时区统一为 Asia/Shanghai，任务级时区配置列入远期。集群内所有调度与执行时间戳统一取数据库服务器时间，不信任应用节点本地时钟。
 
 ### 1.6 设计原则：渐进披露（v1.2 新增，一级原则）
 
@@ -331,7 +334,7 @@ IMAGE 产物两条 source 路径：
 | source | 模板 | 转换引擎 | 说明 |
 |---|---|---|---|
 | HTML_TEMPLATE | HTML 模板 | HTML_SHOT（Playwright 截图，默认） | 样式完全由模板 CSS 控制，长图与响应式宽度天然支持 |
-| ARTIFACT_REF | 引用的 EXCEL 产物 | LIBREOFFICE 或 ASPOSE，全局默认加产物级覆盖 | 文件与图同源。Aspose 无 License 时不注册，界面置灰 |
+| ARTIFACT_REF | 引用的 EXCEL 产物 | LIBREOFFICE 或 ASPOSE，全局默认加产物级覆盖 | 文件与图同源。Aspose 使用公司已有 aspose-cells-18.9.jar，License 文件加载失败或 JDK 21 兼容 spike 不通过时该 provider 不注册、界面置灰 |
 
 引擎故障回退（评审修订）：ARTIFACT_REF 路线支持配置引擎优先级列表（如 [LIBREOFFICE, ASPOSE]），主引擎发生可重试类故障（进程超时、崩溃）时自动尝试下一引擎，产物明细记录实际使用引擎与回退原因。
 
@@ -639,13 +642,20 @@ REPORT 任务可选启用 FANOUT。清单来源二选一：
 
 #### FR-STO-04 HDFS 存储（P2 / M5）
 
-独立 Maven 模块按条件加载。Kerberos 支持视开放问题 3 答复决定实现深度。
+目标环境（已确认）：自建 Apache Hadoop 3.2.4，未启用 Kerberos，走 simple 认证（仅需 NameNode 地址与代理用户配置，无 keytab 管理）。
+
+实现约束：
+1. 独立 Maven 模块按条件加载，hadoop-client 版本与服务端对齐 3.2.x
+2. Hadoop 3.2.4 传递依赖为旧版 Jackson/Guava，与 Spring Boot 3（Jackson 2.15+）存在冲突风险：模块内对 hadoop-client 做传递依赖排除并单独 shade，或改用 hadoop-client-runtime（shaded 发行版），M5 启动时以集成测试验证二选一
+3. 文件读写走 FileStorage 统一接口，路径规范与保留期策略同其他后端
 
 ### 4.11 安全与审计
 
 #### FR-SEC-01 凭据加密（P0 / M1）
 
-数据源密码、渠道 webhook 与 secret、SMTP 密码、存储 accessKey 全部 AES-GCM 加密存储。密文格式（评审修订，M1 即冻结）：key_id + nonce + ciphertext + tag，Base64 编码入库，为密钥轮换预留 key_id 位，避免后续数据迁移。主密钥经环境变量或启动参数注入，不入代码库与数据库，生产建议 KMS（开放问题 1）。轮换机制：双密钥并存解密、单密钥加密，M4a 交付轮换工具。
+数据源密码、渠道 webhook 与 secret、SMTP 密码、存储 accessKey 全部 AES-GCM 加密存储。密文格式（评审修订，M1 即冻结）：key_id + nonce + ciphertext + tag，Base64 编码入库，为密钥轮换预留 key_id 位，避免后续数据迁移。
+
+主密钥托管（已确认）：环境变量 `HP_MASTER_KEY` 注入（公司无 KMS），不入代码库与数据库。配套防护写入部署手册：经 systemd 单元文件或权限 600 的 env 文件设置（不用命令行参数，避免 ps 泄露）；不进 shell history 与 CI 日志；应用日志禁止打印；Docker 部署经 secret/env 注入且不写入镜像层。轮换机制：双密钥并存解密、单密钥加密，M4a 交付轮换工具。
 
 #### FR-SEC-02 认证与 RBAC（P0 / M2，评审修订提前）
 
@@ -765,12 +775,12 @@ Sa-Token 实现登录会话与三角色 RBAC（矩阵见 2.2）。M1 单管理�
 | 钉钉机器人 API | 群消息（M4b） | file 类型大概率不支持，按 FR-CH-08 降级设计，启动前验证冻结 |
 | 飞书机器人 API | 群消息（M4b） | file 类型待验证，按 FR-CH-09 处理 |
 | SMTP 服务 | 邮件推送（M4b） | 客户提供企业邮箱网关 |
-| Chromium（Playwright） | 图片与 PDF 渲染 | 跨平台字体差异，M3 前 spike 验证目标环境 |
+| Chromium（Playwright） | 图片与 PDF 渲染 | 跨平台字体差异，M3 前 spike 验证目标环境；容器内 /dev/shm 与沙箱参数（1.5 节） |
 | LibreOffice | Excel 转图与转 PDF | 样式还原度 spike 验证；进程池防泄漏（FR-RD-09） |
-| Aspose.Cells | Excel 转图备选 | 商业 License（开放问题 2），无 License 仅接口预留 |
+| Aspose.Cells 18.9（公司已有 jar） | Excel 转图备选引擎 | 2018 年版本：License 文件需随 jar 提供；JDK 21 兼容性 M3 前 spike；老版本已知 CVE 的缓解见第 10 章风险表 |
 | Redis | 缓存、分布式锁、限流、全局并发计数 | 集群必备 |
 | MySQL 8.0 | 元数据与执行队列 | SKIP LOCKED 硬依赖；队列 SQL 手写维护 |
-| OSS / MinIO / HDFS | 文件存储 | HDFS Kerberos 待确认（开放问题 3） |
+| OSS / MinIO / HDFS | 文件存储 | HDFS：自建 Hadoop 3.2.4、无 Kerberos、simple 认证；依赖冲突处置见 FR-STO-04 |
 
 ## 8 技术约束
 
@@ -790,7 +800,7 @@ Sa-Token 实现登录会话与三角色 RBAC（矩阵见 2.2）。M1 单管理�
 |---|---|---|---|
 | M1 | 端到端闭环 | 数据源（FR-DS-01~04）、SQL 数据集全部、Markdown 渲染、模板沙箱（FR-RD-10）、企微 text 与 markdown 推送、渠道白名单、健康检查、限流、幂等、调度与队列（含优先级、misfire、抖动）、状态机、重试（复用执行记录）、执行日志、SQL 审计落库、凭据加密（密文含 key_id）、单管理员登录、任务向导含试运行与测试发送 | 配置任务每天定时把昨日汇总发到测试群；未试运行任务无法上线；失败可在日志定位；审计表可查到 PREVIEW/TRIAL/EXEC/VALIDATION_FAILED 四类记录；峰值压测建模报告完成 |
 | M2 | Excel、版本与多用户 | 存储抽象与 LOCAL 与 S3、模板库与版本（逻辑删除与引用校验）、Excel 渲染（语法规范经 spike 冻结）、企微 file 推送与素材缓存、任务配置版本与固版与 diff 与回滚（乐观锁）、任务复制、空结果策略、产物归档与保留期、临时文件清理、预置模板库、展示脱敏、基础 RBAC 三角色与数据源级授权（FR-SEC-02/FR-DS-05） | Excel 报表定时生成并作附件推送；模板可回滚；任务可固版；DEVELOPER 账号仅见已授权数据源；VIEWER 看不到 SQL 原文 |
-| M3 | 图片与 PDF | 图片渲染（HTML_SHOT 必交付、LIBREOFFICE 基础可用、ASPOSE 接口预留视 License）、引擎回退列表、PDF 渲染（消费路径：企微 file 与日志下载）、默认 HTML 模板生成、长图切分与压缩（终止条件）、行数上限与降级、水印、渲染进程管理、对比页；前置 spike：Playwright 目标环境字体与还原度、LibreOffice 样式还原度 | 同一任务 HTML_SHOT 与 LIBREOFFICE 均出图且对比页可评估；5 万行任务按 TRUNCATE_TOP_N 出图并标注；PDF 经企微 file 可收发；沙箱字体在容器环境无方块 |
+| M3 | 图片与 PDF | 图片渲染（HTML_SHOT 必交付、LIBREOFFICE 基础可用、ASPOSE 以已有 18.9 jar 接入，spike 不通过则置灰）、引擎回退列表、PDF 渲染（消费路径：企微 file 与日志下载）、默认 HTML 模板生成、长图切分与压缩（终止条件）、行数上限与降级、水印、渲染进程管理、对比页；前置 spike：Playwright 目标环境字体与还原度（VM 与 Docker 各验一次）、LibreOffice 样式还原度、Aspose 18.9 在 JDK 21 的 License 加载与渲染 | 同一任务三引擎（可用的）均出图且对比页可评估；5 万行任务按 TRUNCATE_TOP_N 出图并标注；PDF 经企微 file 可收发；容器环境字体无方块 |
 | M4a | 治理与稳定性 | RBAC 完善与审计查询页、配置变更审计、账户安全、系统失败告警与去重、心跳巡检与僵死恢复（条件更新防竞态）、错误码字典、阶段时间线、标签与批量操作、配置导出导入（含导入再校验）、配额治理、密钥轮换工具 | 非管理员仅能操作授权资源；任务失败运维群收到一条告警；kill 节点进程后 2 分钟内任务被其他节点接管且无重复推送；导入含恶意 SQL 的 JSON 被拒绝 |
 | M4b | 多渠道与监控 | 钉钉渠道（按验证结论冻结能力）、飞书渠道（同）、邮件渠道（收件人白名单）、消息回链、ALERT 任务全套（状态跃迁、防抖乐观锁、面板、测试触发）、入站触发 API（幂等键）、今日概览、完整前端（向导 ALERT 模式） | 库存低于阈值 5 分钟内群里收到告警且恢复后收到恢复通知，持续触发期间不重复发送；同一报表同时发企微群与邮件；ETL 系统以幂等键调用 API 重复请求仅产生一次执行 |
 | M5 | 分发与扩展 | FANOUT 全套（清单约定列、去重、WAIT_CHILDREN 汇总）、报表审核、GENERIC_WEBHOOK（HMAC 签名）、通讯录、HDFS、数据就绪预检、执行状态查询 API、运营指标面板 | 20 个分公司经理各自收到仅含本分公司数据的带水印报表，单分公司失败不影响其余，父执行汇总正确；重要报表先审核后推送且驳回留痕 |
@@ -800,14 +810,21 @@ Sa-Token 实现登录会话与三角色 RBAC（矩阵见 2.2）。M1 单管理�
 
 ## 10 风险与开放问题
 
-开放问题（需业务方在对应里程碑启动前答复）：
+开放问题（v1.3 全部答复，M1 开工阻塞解除）：
 
-| 编号 | 问题 | 阻塞点 |
+| 编号 | 问题 | 答复 | 落点 |
+|---|---|---|---|
+| 1 | AES-GCM 主密钥托管方式 | 公司无 KMS，用环境变量 | FR-SEC-01（含注入方式与防护要求） |
+| 2 | Aspose 商业 License | 已有 aspose-cells-18.9.jar 可用 | FR-RD-04；前提：License 文件随 jar 一并提供（仅有 jar 无 License 文件时输出带评估水印，不可用），M3 前需确认 |
+| 3 | HDFS 是否启用 Kerberos | 未启用；自建 Apache Hadoop 3.2.4 | FR-STO-04（simple 认证、客户端版本对齐、依赖冲突处置） |
+| 4 | 部署形态 | 虚拟机或 Docker | 1.5 节（双路径：部署手册 / 含渲染依赖镜像约 1.5GB，容器 Chromium 配置要点） |
+
+新增待确认项（不阻塞 M1）：
+
+| 编号 | 事项 | 截止 |
 |---|---|---|
-| 1 | AES-GCM 主密钥托管方式：环境变量、启动参数还是 KMS | 阻塞 M1 |
-| 2 | Aspose 商业 License 是否已有 | 影响 M3 范围（无则仅接口预留） |
-| 3 | HDFS 是否启用 Kerberos | 影响 M5 |
-| 4 | 部署形态：物理机还是 K8s 容器（决定 Chromium、字体、LibreOffice 打包方式） | 影响 M3 交付形态 |
+| 5 | Aspose License 文件（.xml）是否随 18.9 jar 一并可提供 | M3 启动前 |
+| 6 | Docker 基础镜像源与私有仓库地址（公司内网 registry） | M1 部署联调前 |
 
 外部事实待验证清单（评审修订新增，M4b 启动前冻结）：
 
@@ -825,6 +842,8 @@ Sa-Token 实现登录会话与三角色 RBAC（矩阵见 2.2）。M1 单管理�
 |---|---|
 | Freemarker 模板注入导致 RCE（评审新增，阻塞级） | FR-RD-10 沙箱五层防护，M1 交付并纳入安全测试用例 |
 | LibreOffice 样式还原度不足、并发崩溃、内存泄漏 | 降为补充路线；spike 验证；独立 profile、信号量限并发、超时强杀、50 请求销毁重建 |
+| Aspose 18.9 为 2018 年版本：JDK 21 兼容性未知、存在已知 CVE | M3 前 spike 验证 License 加载与渲染；该引擎仅渲染平台内受控模板文件（FR-TPL-01 校验入库），不接受任意外部文件，攻击面受限；spike 不通过则不注册该 provider（HTML_SHOT + LIBREOFFICE 已覆盖需求） |
+| Hadoop 3.2.4 客户端旧版 Jackson/Guava 与 Spring Boot 3 冲突 | FR-STO-04：传递依赖排除 + shade 或改用 hadoop-client-runtime，M5 集成测试验证 |
 | Playwright 跨平台字体与渲染差异 | 统一 Noto Sans CJK 字体清单；M3 前在目标环境 spike；对比页评估 |
 | Chromium 内存占用与并发 | 进程池、并发信号量、单页超时 |
 | EasyExcel 多数据集填充语法限制 | M2 前 spike，必要时约束一个 sheet 一个列表，语法规范冻结后写入模板编写指南 |

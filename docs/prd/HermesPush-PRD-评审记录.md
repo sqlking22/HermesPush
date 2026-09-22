@@ -93,7 +93,7 @@
 ## 七、遗留事项
 
 1. 第 10 章"外部事实待验证清单"5 项，M4b 启动前冻结（钉钉/飞书 file 能力、飞书 image_key 有效期、钉钉限流数值、企微 mentioned_list 标识类型）
-2. 开放问题 1-4（主密钥托管、Aspose License、HDFS Kerberos、部署形态）待业务方答复，问题 1 阻塞 M1
+2. ~~开放问题 1-4 待业务方答复~~ 已于 2026-09-22 全部答复并落入 PRD v1.3：主密钥=环境变量、Aspose=已有 18.9 jar（License 文件待确认提供，新增待确认项 5）、HDFS=无 Kerberos/Hadoop 3.2.4、部署=VM 或 Docker；M1 开工阻塞解除
 3. EasyExcel 占位符语法、Playwright 目标环境还原度、LibreOffice 样式还原度三项 spike，分别在 M2、M3 启动前完成
 4. 技术设计文档与 PRD v1.1 的同步修订（幂等四元组、执行表新字段、白名单表、心跳参数、Freemarker 沙箱）已随本次提交完成关键项，其余以 PRD 为准，M1 实施计划阶段全量对齐
 5. 原型 index.html 与 v1.1 的两处已知差异（M4a/M4b 标注、钉钉能力校验交互）随下一版原型迭代
