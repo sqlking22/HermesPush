@@ -1,0 +1,8 @@
+target/
+node_modules/
+dist/
+.env
+.superpowers/
+*.class
+*.log
+.DS_Store

@@ -706,6 +706,7 @@ package com.hermes.push;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -714,18 +715,25 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public abstract class AbstractIntegrationTest {
   static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
       .withDatabaseName("hermes").withUsername("root").withPassword("root").withReuse(true);
-  static { MYSQL.start(); }
+  static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
+      .withExposedPorts(6379).withReuse(true);
+  static { MYSQL.start(); REDIS.start(); }
   @DynamicPropertySource
   static void props(DynamicPropertyRegistry r) {
     r.add("spring.datasource.url", MYSQL::getJdbcUrl);
     r.add("spring.datasource.username", MYSQL::getUsername);
     r.add("spring.datasource.password", MYSQL::getPassword);
+    r.add("spring.data.redis.host", REDIS::getHost);
+    r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     r.add("hermes.master-key", () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
     r.add("spring.quartz.auto-startup", () -> "false"); // 单测不启调度
     r.add("hermes.worker.concurrency", () -> "0");      // 单测不启 Worker
+    r.add("hermes.auth.enabled", () -> "false");        // 单测不走登录拦截（Task 20 定义该开关）
   }
 }
 ```
+
+（Redis 容器随基类自始提供：Task 15 限流测试直接可用；`hermes.auth.enabled=false` 属性在 Task 20 之前无消费方，Spring 对未绑定属性不报错。）
 
 - [ ] **Step 2: 写失败测试**
 
@@ -1374,10 +1382,7 @@ class QueryEngineTest extends AbstractIntegrationTest {
   @Autowired DatasourceService svc;
   @Autowired JdbcTemplate jdbc;
 
-  static boolean seeded = false;
-  @BeforeAll static void seed() {
-    // 注意：@BeforeAll 需要实例方法时用 @TestInstance(PER_CLASS)；这里用静态标记 + @BeforeEach 逻辑
-  }
+  static boolean seeded = false; // 60k 行种子数据只灌一次（容器跨用例复用）
 
   Long dsId(int maxRows, String overflow, int timeoutSec) {
     Long id = svc.save(new DatasourceSaveRequest("qe-" + System.nanoTime(), "MYSQL",
@@ -1714,8 +1719,10 @@ git commit -m "feat(dataset): 数据预览API(200行上限,PREVIEW/VALIDATION_FA
 package com.hermes.push.exec;
 
 import com.hermes.push.AbstractIntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.concurrent.*;
@@ -1724,6 +1731,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ExecQueueRepositoryTest extends AbstractIntegrationTest {
   @Autowired ExecQueueRepository queue;
+  @Autowired JdbcTemplate jdbc;
+
+  @BeforeEach void clean() { jdbc.update("DELETE FROM hp_task_exec"); } // 用例间隔离，断言可精确
 
   Long pending(int priority, String idem) {
     return queue.insertPending(1L, 1L, TriggerType.CRON, priority,
@@ -1731,11 +1741,11 @@ class ExecQueueRepositoryTest extends AbstractIntegrationTest {
   }
 
   @Test void claimReturnsHighestPriorityFirst() {
-    pending(40, "c1"); pending(70, "c2");
-    assertThat(queue.claim("node-a")).isPresent();
-    TaskExec e = queue.getById(queue.claim("node-a").orElseThrow()); // 第二次领取剩余任务
-    // 首个领取的应是 priority=70：直接验证状态
-    assertThat(e.getPriority()).isIn(40, 70);
+    Long low = pending(40, "c1");
+    Long high = pending(70, "c2");
+    assertThat(queue.claim("node-a")).contains(high); // priority DESC 先领 70
+    assertThat(queue.claim("node-a")).contains(low);
+    assertThat(queue.claim("node-a")).isEmpty();
   }
   @Test void concurrentClaimNoDuplicate() throws Exception {
     for (int i = 0; i < 6; i++) pending(40, "cc" + i);
@@ -1750,10 +1760,11 @@ class ExecQueueRepositoryTest extends AbstractIntegrationTest {
     start.countDown();
     for (var f : futures) f.get(30, TimeUnit.SECONDS);
     pool.shutdown();
-    Integer running = org.springframework.jdbc.object.SqlProvider.class == null ? null : null; // 占位不使用
-    assertThat(claimed.get()).isGreaterThanOrEqualTo(6); // 含前面用例遗留任务，重点是并发不重复：running 状态无同 id 两次
+    assertThat(claimed.get()).isEqualTo(6); // 每条恰好被领取一次
+    Integer running = jdbc.queryForObject("SELECT COUNT(*) FROM hp_task_exec WHERE status='RUNNING'", Integer.class);
+    assertThat(running).isEqualTo(6);
   }
-  @Test void heartbeatFailsAfterExternalReset() {
+  @Test void heartbeatFailsForWrongNode() {
     Long id = pending(40, "hb1");
     queue.claim("node-x");
     assertThat(queue.heartbeat(id, "node-x")).isTrue();
@@ -1769,14 +1780,12 @@ class ExecQueueRepositoryTest extends AbstractIntegrationTest {
     queue.claim("node-y");
     queue.retryWait(id, "PUSH-011", "rate limited", 1);
     Thread.sleep(1500);
-    assertThat(queue.promoteDueRetries()).isGreaterThanOrEqualTo(1);
+    assertThat(queue.promoteDueRetries()).isEqualTo(1);
     assertThat(queue.getById(id).getStatus()).isEqualTo(ExecStatus.PENDING.name());
     assertThat(queue.getById(id).getRetryCount()).isEqualTo(1);
   }
 }
 ```
-
-（注：`concurrentClaimNoDuplicate` 中占位行删除；断言以"6 条全部被领取且每条 RUNNING 只属于一个节点"为准，实现时用 `SELECT COUNT(*) FROM hp_task_exec WHERE status='RUNNING' GROUP BY id HAVING COUNT(*)>1` 为空验证。）
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -2419,7 +2428,7 @@ Expected: COMPILATION ERROR
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `.\mvnw.cmd -pl hermes-server test "-Dtest=WecomBotChannelTest+WhitelistServiceTest"`
-Expected: 全部 PASS（`localRateLimiterWaitsThenFails` 依赖真实 Redis——AbstractIntegrationTest 增加 `GenericContainer<>("redis:7-alpine")` 静态容器与 `spring.data.redis` 属性注入）
+Expected: 全部 PASS（Redis 容器已由 Task 4 基类提供，`localRateLimiterWaitsThenFails` 直接可用）
 
 - [ ] **Step 5: Commit**
 
@@ -2656,8 +2665,11 @@ public class ExecPipeline {
     try {
       var eff = tasks.loadEffectiveConfig(exec.getTaskId());
       LocalDate runDate = jdbc.queryForObject("SELECT CURDATE()", LocalDate.class);
-      LocalDate bizDate = exec.getBizDate() != null ? exec.getBizDate() : runDate.plusDays(offset(eff));
       Map<String,String> runtime = readParams(exec.getParamsJson());
+      // bizDate 覆盖语义（FR-TSK-04）：手动触发/补数传入的 biz_date 折算为等效偏移，
+      // 使 ParamResolver 的 #{bizDate} 解析到覆盖值；未传则用任务配置的默认偏移
+      int offset = offset(eff);
+      if (exec.getBizDate() != null) offset = (int) (exec.getBizDate().toEpochDay() - runDate.toEpochDay());
       // 阶段1：查询
       long q0 = System.nanoTime();
       Map<String, DatasetResult> results = new LinkedHashMap<>();
@@ -2665,8 +2677,7 @@ public class ExecPipeline {
         var datasource = dsSvc.getEnabled(ds.datasourceId());
         try { validator.validate(ds.sql(), datasource.getType()); }
         catch (BizException e) { audit.recordValidationFailed(ds.datasourceId(), ds.sql(), "exec:" + exec.getId(), null, e.getErrorCode().getCode() + " " + e.getDetail()); throw e; }
-        PreparedSql p = params.prepare(ds.sql(), ds.params(), Map.of(), runtime, bizDate == null ? runDate : runDate, offset(eff));
-        // 注意：bizDate 语义由 resolve 内部基于 runDate+offset 计算，runtime 覆盖走 params
+        PreparedSql p = params.prepare(ds.sql(), ds.params(), Map.of(), runtime, runDate, offset);
         DatasetResult r = engine.execute(datasource, p, 0, exec.getId());
         audit.record(exec.getTriggerType() == TriggerType.TRIAL ? SqlAuditScene.TRIAL : SqlAuditScene.EXEC,
             ds.datasourceId(), ds.sql(), p.auditParams(), r.totalRows(), null, "exec:" + exec.getId(), exec.getId(), null);
