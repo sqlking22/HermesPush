@@ -1713,11 +1713,11 @@ git commit -m "feat(dataset): 数据预览API(200行上限,PREVIEW/VALIDATION_FA
   - `enum ExecStatus{PENDING,RUNNING,RETRY_WAIT,SUCCESS,PARTIAL_SUCCESS,FAILED,TIMEOUT,CANCELLED}`、`enum TriggerType{CRON,MANUAL,TEST,TRIAL,API}`
   - `ExecPriority`：常量 `TRIAL_TEST=70, MANUAL_API=60, CRON=40`
   - `ExecQueueRepository`：
-    - `Long insertPending(long taskId, long taskVersionId, TriggerType trig, int priority, LocalDateTime fireTime, LocalDate bizDate, String paramsJson, String idemKey)`——时间字段由 XML 内 `NOW(3)`/传入值决定；唯一键冲突返回 null（幂等，评审修订 H2）
+    - `Long insertPending(long taskId, long taskVersionId, TriggerType trig, int priority, LocalDateTime fireTime, LocalDate bizDate, String paramsJson, String idemKey)`——时间字段由 XML 内 `NOW(3)`/传入值决定；**普通 INSERT + 捕获 DuplicateKeyException 返回 null**（幂等，评审修订 H2 + Task 11 评审轮修订：不用 INSERT IGNORE，避免吞掉数据截断/NOT NULL 等真实错误）
     - `Optional<Long> claim(String nodeId)`——事务内两步：SKIP LOCKED 选 id → 条件 UPDATE 置 RUNNING；无任务返回 empty
     - `boolean heartbeat(long execId, String nodeId)`——`UPDATE ... SET heartbeat_at=NOW(3) WHERE id=? AND node_id=? AND status='RUNNING'`；返回 false 表示已被巡检重置，Worker 必须放弃（评审修订 B3）
-    - `void retryWait(long execId, String errorCode, String errorMsg, int backoffSeconds)`——置 RETRY_WAIT、retry_count+1、`next_retry_at=NOW(3)+INTERVAL ? SECOND`（数据库时间，评审修订 H5）
-    - `void finish(long execId, ExecStatus status, String stageCostsJson, Integer rowsTotal, String errorCode, String errorMsg)`——cost_ms 用 `TIMESTAMPDIFF(MICROSECOND, created_at, NOW(3))/1000`
+    - `boolean retryWait(long execId, String errorCode, String errorMsg, int backoffSeconds)`——置 RETRY_WAIT、retry_count+1、`next_retry_at=NOW(3)+INTERVAL ? SECOND`（数据库时间，评审修订 H5）；**返回影响行数>0**（false=状态已非 RUNNING，调用方须放弃，Task 11 评审轮修订）
+    - `boolean finish(long execId, ExecStatus status, String stageCostsJson, Integer rowsTotal, String errorCode, String errorMsg)`——cost_ms 用 `TIMESTAMPDIFF(MICROSECOND, created_at, NOW(3))/1000`；**返回影响行数>0**（false=状态已被并发迁移，调用方须记录告警日志，Task 11 评审轮修订）
     - `int promoteDueRetries()`——RETRY_WAIT 且到期 → PENDING（Task 18 调用）
     - `TaskExec getById(long execId)`
 - 领取 SQL 手写 XML，不经 MyBatis-Plus 封装（PRD 第 8 章约束），Mapper 接口方法逐个对应 XML 语句
