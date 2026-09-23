@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -65,8 +66,11 @@ public class ParamResolver {
       boolean isTimeVariable = isTimeVariable(token);
 
       if (isTimeVariable) {
-        // 裁决 B：时间变量始终走 TimeVariableResolver（runtime params 作为 overrides）
-        value = time.resolve(token, runDate, bizOffsetDays, runtimeParams);
+        // 裁决 B：时间变量始终走 TimeVariableResolver
+        // combinedOverrides = static 为底 + runtime 覆盖同名（优先级 runtime > static）
+        Map<String, String> combinedOverrides = new HashMap<>(staticParams);
+        combinedOverrides.putAll(runtimeParams);
+        value = time.resolve(token, runDate, bizOffsetDays, combinedOverrides);
       } else {
         // 非时间变量：runtime > static > default
         ParameterDefinition def = defMap.get(baseName);
@@ -96,7 +100,12 @@ public class ParamResolver {
         } else {
           type = ParamType.STRING;
         }
-        binds.add(convert(value, type));
+        try {
+          binds.add(convert(value, type));
+        } catch (IllegalArgumentException | DateTimeParseException e) {
+          String firstLine = e.getMessage() == null ? "" : e.getMessage().split("\n")[0];
+          throw new BizException(ErrorCode.SQL_004, "参数 " + baseName + " 类型转换失败: " + firstLine);
+        }
         audit.putIfAbsent(baseName, value);
       }
       hm.appendReplacement(out, "?");
@@ -115,7 +124,8 @@ public class ParamResolver {
   }
 
   private boolean isTimeVariable(String token) {
-    return TIME_BASE.matcher(token).find();
+    String baseName = extractBaseName(token);
+    return baseName.equals("runDate") || baseName.equals("bizDate");
   }
 
   private boolean tryParseDate(String value) {
@@ -131,9 +141,20 @@ public class ParamResolver {
     return switch (t) {
       case INT -> Long.parseLong(v);
       case DECIMAL -> new BigDecimal(v);
-      case DATE -> java.sql.Date.valueOf(v.length() == 10 ? v : v.substring(0, 10));
+      case DATE -> convertDate(v);
       case STRING -> v;
     };
+  }
+
+  private java.sql.Date convertDate(String v) {
+    if (v.length() == 10 && v.charAt(4) == '-') {
+      return java.sql.Date.valueOf(v);
+    }
+    if (v.length() == 8 && v.matches("\\d{8}")) {
+      LocalDate d = LocalDate.parse(v, DateTimeFormatter.BASIC_ISO_DATE);
+      return java.sql.Date.valueOf(d);
+    }
+    throw new IllegalArgumentException("无法解析为日期: " + v);
   }
 
   private String firstNonNull(String... values) {

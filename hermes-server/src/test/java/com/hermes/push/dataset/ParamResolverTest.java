@@ -97,4 +97,53 @@ class ParamResolverTest {
         .hasMessageContaining("SQL-004")
         .hasMessageContaining("bizDate");
   }
+
+  // ---- 评审轮 1 修复 ----
+
+  @Test void paramNameStartingWithBizDateNotTimeVariable() {
+    var defs = List.of(def("bizDateRegion", ParamType.STRING, true, null, false, null));
+    PreparedSql p = resolver.prepare("SELECT #{bizDateRegion}", defs,
+        Map.of(), Map.of("bizDateRegion", "chengdu"), RUN, -1);
+    assertThat(p.bindValues()).containsExactly("chengdu");
+    assertThat(p.auditParams()).containsEntry("bizDateRegion", "chengdu");
+  }
+
+  @Test void staticBizDateOverrideAppliesWithPattern() {
+    // static 覆盖生效
+    PreparedSql p1 = resolver.prepare("SELECT #{bizDate}, #{bizDate:yyyyMMdd}",
+        List.of(), Map.of("bizDate", "2026-01-01"), Map.of(), RUN, -1);
+    assertThat(p1.bindValues()).containsExactly(
+        java.sql.Date.valueOf(LocalDate.of(2026, 1, 1)),
+        "20260101");
+
+    // runtime 同名覆盖 static
+    PreparedSql p2 = resolver.prepare("SELECT #{bizDate}",
+        List.of(), Map.of("bizDate", "2026-01-01"), Map.of("bizDate", "2026-06-15"), RUN, -1);
+    assertThat(p2.bindValues()).containsExactly(
+        java.sql.Date.valueOf(LocalDate.of(2026, 6, 15)));
+  }
+
+  @Test void intParamBadValue_sql004() {
+    var defs = List.of(def("cnt", ParamType.INT, true, null, false, null));
+    assertThatThrownBy(() -> resolver.prepare("SELECT #{cnt}", defs,
+        Map.of("cnt", "abc"), Map.of(), RUN, -1))
+        .isInstanceOf(BizException.class)
+        .hasMessageContaining("SQL-004")
+        .hasMessageContaining("cnt");
+  }
+
+  @Test void dateParamEightDigits() {
+    var defs = List.of(def("dt", ParamType.DATE, true, null, false, null));
+    PreparedSql p = resolver.prepare("SELECT #{dt}", defs,
+        Map.of("dt", "20260920"), Map.of(), RUN, -1);
+    assertThat(p.bindValues()).containsExactly(java.sql.Date.valueOf(LocalDate.of(2026, 9, 20)));
+  }
+
+  @Test void dateParamGarbage_sql004() {
+    var defs = List.of(def("dt", ParamType.DATE, true, null, false, null));
+    assertThatThrownBy(() -> resolver.prepare("SELECT #{dt}", defs,
+        Map.of("dt", "abc"), Map.of(), RUN, -1))
+        .isInstanceOf(BizException.class)
+        .hasMessageContaining("SQL-004");
+  }
 }
