@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hermes.push.exec.ExecPushMapper">
+
+  <insert id="upsertSuccess">
+    INSERT INTO hp_task_exec_push(exec_id, channel_id, artifact_key, msg_type, status, sent_at)
+    VALUES (#{execId}, #{channelId}, #{artifactKey}, #{msgType}, 'SUCCESS', NOW(3))
+    ON DUPLICATE KEY UPDATE
+      status = 'SUCCESS',
+      error_code = NULL,
+      error_msg = NULL,
+      sent_at = NOW(3),
+      retry_count = retry_count
+  </insert>
+
+  <insert id="upsertFailed">
+    INSERT INTO hp_task_exec_push(exec_id, channel_id, artifact_key, msg_type, status, error_code, error_msg, sent_at, retry_count)
+    VALUES (#{execId}, #{channelId}, #{artifactKey}, #{msgType}, 'FAILED', #{errorCode}, #{errorMsg}, NOW(3), #{retryIncrement})
+    ON DUPLICATE KEY UPDATE
+      status = 'FAILED',
+      error_code = VALUES(error_code),
+      error_msg = VALUES(error_msg),
+      sent_at = NOW(3),
+      retry_count = retry_count + #{retryIncrement}
+  </insert>
+
+</mapper>
