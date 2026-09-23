@@ -2,9 +2,13 @@ package com.hermes.push.common;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
@@ -13,6 +17,22 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<Map<String,Object>>> handleBiz(BizException e) {
     log.warn("biz error {}: {}", e.getErrorCode().getCode(), e.getDetail());
     return ResponseEntity.ok(ApiResponse.fail(e.getErrorCode(), e.getDetail()));
+  }
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ResponseEntity<ApiResponse<Map<String,Object>>> handleValidation(MethodArgumentNotValidException e) {
+    String detail = e.getBindingResult().getFieldErrors().stream()
+        .map(f -> f.getField() + ": " + f.getDefaultMessage())
+        .collect(Collectors.joining("; "));
+    log.warn("validation error: {}", detail);
+    return ResponseEntity.badRequest().body(ApiResponse.fail(ErrorCode.SYS_006, detail));
+  }
+  @ExceptionHandler(BindException.class)
+  public ResponseEntity<ApiResponse<Map<String,Object>>> handleBind(BindException e) {
+    String detail = e.getFieldErrors().stream()
+        .map(f -> f.getField() + ": " + f.getDefaultMessage())
+        .collect(Collectors.joining("; "));
+    log.warn("bind error: {}", detail);
+    return ResponseEntity.badRequest().body(ApiResponse.fail(ErrorCode.SYS_006, detail));
   }
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiResponse<Map<String,Object>>> handleOther(Exception e) {

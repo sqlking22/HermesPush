@@ -22,7 +22,8 @@ public enum ErrorCode {
   SYS_002("SYS-002","任务状态不允许该操作","刷新后重试"),
   SYS_003("SYS-003","资源不存在","检查 ID"),
   SYS_004("SYS-004","保存冲突，数据已被他人修改","刷新后重试"),
-  SYS_005("SYS-005","渲染超时","简化模板或调大超时");
+  SYS_005("SYS-005","渲染超时","简化模板或调大超时"),
+  SYS_006("SYS-006","请求参数校验失败","按提示填写后重试");
 
   private final String code, userMessage, suggestion;
   ErrorCode(String code, String userMessage, String suggestion) {
