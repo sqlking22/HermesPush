@@ -78,6 +78,14 @@ public class ScheduleSyncService implements ScheduleSyncPort {
     onPublish(taskId, cron);
   }
 
+  /**
+   * 手动触发指定任务（以 manual=true 绕过 ONLINE 状态检查）。
+   *
+   * <p>仅限测试与运维补偿场景使用。调用方必须自行确认任务状态与触发合法性；
+   * 不得经任何 Controller 直接暴露此能力。
+   *
+   * @param taskId 任务 ID
+   */
   public void triggerNow(Long taskId) {
     JobKey jk = jobKey(taskId);
     try {
