@@ -12,6 +12,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DatasourceController {
   private final DatasourceService service;
+  private final ConnectionTester tester;
 
   @PostMapping
   public ApiResponse<Long> save(@Valid @RequestBody DatasourceSaveRequest req) {
@@ -38,5 +39,15 @@ public class DatasourceController {
   public ApiResponse<Void> setStatus(@PathVariable Long id, @RequestParam boolean enable) {
     service.setStatus(id, enable);
     return ApiResponse.ok(null);
+  }
+
+  @PostMapping("/{id}/test")
+  public ApiResponse<TestResultVO> test(@PathVariable Long id) {
+    return ApiResponse.ok(tester.test(service.getEnabled(id)));
+  }
+
+  @PostMapping("/test-inline")
+  public ApiResponse<TestResultVO> testInline(@Valid @RequestBody TestInlineRequest req) {
+    return ApiResponse.ok(tester.testInline(req.jdbcUrl(), req.username(), req.password()));
   }
 }
