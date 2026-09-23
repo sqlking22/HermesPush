@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hermes.push.exec.ExecQueueMapper">
+
+  <insert id="insertPending" useGeneratedKeys="true" keyProperty="id">
+    INSERT IGNORE INTO hp_task_exec
+      (task_id, task_version_id, trigger_type, priority, status, fire_time, biz_date, params_json, idempotency_key)
+    VALUES
+      (#{taskId}, #{taskVersionId}, #{triggerType}, #{priority}, 'PENDING', #{fireTime}, #{bizDate}, #{paramsJson}, #{idempotencyKey})
+  </insert>
+
+  <select id="selectClaimableId" resultType="long">
+    SELECT id FROM hp_task_exec
+    WHERE status = 'PENDING'
+    ORDER BY priority DESC, fire_time ASC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
+  </select>
+
+  <update id="markRunning">
+    UPDATE hp_task_exec SET status='RUNNING', node_id=#{nodeId}, heartbeat_at=NOW(3)
+    WHERE id=#{id} AND status='PENDING'
+  </update>
+
+  <update id="heartbeat">
+    UPDATE hp_task_exec SET heartbeat_at=NOW(3)
+    WHERE id=#{id} AND node_id=#{nodeId} AND status='RUNNING'
+  </update>
+
+  <update id="retryWait">
+    UPDATE hp_task_exec
+    SET status='RETRY_WAIT', retry_count=retry_count+1,
+        next_retry_at=NOW(3) + INTERVAL #{backoffSeconds} SECOND,
+        error_code=#{errorCode}, error_msg=#{errorMsg}
+    WHERE id=#{id} AND status='RUNNING'
+  </update>
+
+  <update id="promoteDueRetries">
+    UPDATE hp_task_exec SET status='PENDING', node_id=NULL, heartbeat_at=NULL
+    WHERE status='RETRY_WAIT' AND next_retry_at &lt;= NOW(3)
+  </update>
+
+  <update id="finish">
+    UPDATE hp_task_exec
+    SET status=#{status}, stage_costs_json=#{stageCosts}, rows_total=#{rowsTotal},
+        error_code=#{errorCode}, error_msg=#{errorMsg},
+        cost_ms=TIMESTAMPDIFF(MICROSECOND, created_at, NOW(3))/1000
+    WHERE id=#{id} AND status='RUNNING'
+  </update>
+</mapper>
