@@ -21,4 +21,5 @@ hermes:
   node-id: ${HOSTNAME:node-dev}
   worker: { concurrency: 4, poll-interval-ms: 2000 }
   rate-limiter: ${HP_RATE_LIMITER:local}
+  render: { timeout-sec: 30 }
 server.port: 8080
