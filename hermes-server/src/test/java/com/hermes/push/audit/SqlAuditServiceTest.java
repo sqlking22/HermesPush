@@ -28,4 +28,13 @@ class SqlAuditServiceTest extends AbstractIntegrationTest {
     Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM hp_sql_audit WHERE scene='VALIDATION_FAILED'", Integer.class);
     assertThat(n).isEqualTo(1);
   }
+  @Test void oversizedSqlTruncatedNotLost() {
+    String bigSql = "SELECT '" + "x".repeat(70000) + "'";
+    audit.record(SqlAuditScene.EXEC, 1L, bigSql, Map.of(), 0, 5L, "admin", 200L, "10.0.0.1");
+    Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM hp_sql_audit WHERE scene='EXEC'", Integer.class);
+    assertThat(n).isGreaterThanOrEqualTo(1);
+    String stored = jdbc.queryForObject("SELECT sql_text FROM hp_sql_audit WHERE scene='EXEC' ORDER BY id DESC LIMIT 1", String.class);
+    assertThat(stored.getBytes(java.nio.charset.StandardCharsets.UTF_8).length).isLessThanOrEqualTo(65535);
+    assertThat(stored).contains("[TRUNCATED").endsWith("]");
+  }
 }

@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -17,6 +18,8 @@ import java.util.Set;
 public class SqlAuditService {
 
   private static final Set<String> SENSITIVE_PREFIXES = Set.of("pwd", "secret", "idcard", "phone");
+  /** TEXT 列上限 65535 字节，留约 5KB 安全余量按 60000 字节截断 */
+  private static final int SQL_TEXT_MAX_BYTES = 60000;
 
   private final SqlAuditMapper mapper;
   private final ObjectMapper objectMapper;
@@ -28,7 +31,7 @@ public class SqlAuditService {
       SqlAudit audit = new SqlAudit();
       audit.setScene(scene.name());
       audit.setDatasourceId(datasourceId);
-      audit.setSqlText(sqlText);
+      audit.setSqlText(truncateSqlText(sqlText));
       audit.setParamsJson(serializeWithMask(params));
       audit.setRowsReturned(rows);
       audit.setCostMs(costMs);
@@ -37,7 +40,8 @@ public class SqlAuditService {
       audit.setClientIp(clientIp);
       mapper.insert(audit);
     } catch (Exception e) {
-      log.error("SQL audit record failed, scene={}, datasourceId={}", scene, datasourceId, e);
+      log.error("SQL audit record failed, scene={}, datasourceId={}, operator={}, execId={}",
+          scene, datasourceId, operator, execId, e);
     }
   }
 
@@ -66,6 +70,34 @@ public class SqlAuditService {
     } catch (JsonProcessingException ex) {
       throw new RuntimeException("failed to serialize params_json", ex);
     }
+  }
+
+  /**
+   * 按 UTF-8 字节数截断 sqlText，保证写入 TEXT 列（65535 字节上限）不溢出。
+   * 截断后追加标记 "...[TRUNCATED, original N chars]"，标记本身计入长度预算。
+   */
+  private String truncateSqlText(String sqlText) {
+    if (sqlText == null) return null;
+    byte[] bytes = sqlText.getBytes(StandardCharsets.UTF_8);
+    if (bytes.length <= SQL_TEXT_MAX_BYTES) {
+      return sqlText;
+    }
+    int originalLen = sqlText.length();
+    String markerPrefix = "...[TRUNCATED, original ";
+    String markerSuffix = " chars]";
+    // 预留标记长度（数字部分按 10 位估算，足够覆盖 Integer.MAX_VALUE）
+    int reserve = markerPrefix.length() + 10 + markerSuffix.length();
+    int budget = SQL_TEXT_MAX_BYTES - reserve;
+    if (budget <= 0) budget = SQL_TEXT_MAX_BYTES / 2;
+
+    // 从 budget 位置向前回溯找到完整 UTF-8 字符边界
+    int cutPos = budget;
+    while (cutPos > 0 && (bytes[cutPos] & 0xC0) == 0x80) {
+      cutPos--;
+    }
+    String truncated = new String(bytes, 0, cutPos, StandardCharsets.UTF_8);
+    String marker = markerPrefix + originalLen + markerSuffix;
+    return truncated + marker;
   }
 
   private boolean isSensitive(String key) {
