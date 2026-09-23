@@ -17,7 +17,6 @@ public class ConnectionTester {
 
   private TestResultVO doTest(String url, String user, String pwd) {
     long t0 = System.nanoTime();
-    DriverManager.setLoginTimeout(10);
     String testUrl = url + (url.contains("?") ? "&" : "?") + "createDatabaseIfNotExist=false";
     Properties p = new Properties(); p.setProperty("user", user); p.setProperty("password", pwd);
     p.setProperty("connectTimeout", "10000"); p.setProperty("socketTimeout", "10000");
