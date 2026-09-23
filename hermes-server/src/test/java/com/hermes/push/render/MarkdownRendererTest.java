@@ -67,4 +67,28 @@ class MarkdownRendererTest {
     assertThatThrownBy(() -> r.enforceBytes("x".repeat(5000), 4096, "FAIL"))
         .isInstanceOf(BizException.class).hasMessageContaining("RD-002");
   }
+  @Test void includeDirectiveRejected() {
+    // 空 StringTemplateLoader 下，#include/#import 找不到任何模板 → TPL-003，证明本地文件不可读
+    BizException ex = catchThrowableOfType(() ->
+        r.render(def("<#include \"/etc/passwd\">"), model(), Map.of(), 30), BizException.class);
+    assertThat(ex).isNotNull();
+    assertThat(ex.getErrorCode().getCode()).startsWith("TPL-");
+  }
+  @Test void concatenatedPayloadStillBlockedBySandbox() {
+    // 证明：即使扫描层被拼接绕过，沙箱层仍然拦截 ?new 类解析（无 RCE）
+    // 直接调 SandboxFreemarker.render 绕过 MarkdownRenderer 入口 scan
+    // 模板用字符串拼接构造 ?eval + ?new 调用，验证 ALLOWS_NOTHING_RESOLVER 生效
+    String template = "<#assign ev=\"?ev\" + \"al\">"
+        + "<#assign payload=\"'freemarker.template.utility.Execute'?n\" + \"ew()\">"
+        + "${payload${ev}}";
+    assertThatThrownBy(() -> fm.render("sandbox-probe", template, Map.of(), 5))
+        .isInstanceOf(BizException.class)
+        .hasMessageContaining("TPL-003");
+    // 关键：异常是模板/解析错误（ALLOWS_NOTHING_RESOLVER 拒绝类解析），不是命令执行输出
+  }
+  @Test void enforceBytesTooSmallBudget_rd002() {
+    // maxBytes 小于后缀长度时，即使 TRUNCATE 也无法在预算内输出 → RD_002
+    assertThatThrownBy(() -> r.enforceBytes("x".repeat(100), 10, "TRUNCATE"))
+        .isInstanceOf(BizException.class).hasMessageContaining("RD-002");
+  }
 }

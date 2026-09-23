@@ -2,11 +2,13 @@ package com.hermes.push.render;
 
 import com.hermes.push.common.BizException;
 import com.hermes.push.common.ErrorCode;
+import freemarker.cache.StringTemplateLoader;
 import freemarker.core.InvalidReferenceException;
 import freemarker.core.TemplateClassResolver;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateExceptionHandler;
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 
 import java.io.StringReader;
@@ -46,6 +48,9 @@ public class SandboxFreemarker {
     // 沙箱三件套 3：模板异常快速失败（rethrow 包装），不记录到日志
     cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
     cfg.setLogTemplateExceptions(false);
+
+    // 封闭 #include/#import 攻击面：空 StringTemplateLoader，任何包含/导入都会因找不到模板失败
+    cfg.setTemplateLoader(new StringTemplateLoader());
 
     // 共享的虚拟线程 executor，随 bean 生命周期
     this.renderExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -101,5 +106,10 @@ public class SandboxFreemarker {
       throw new BizException(ErrorCode.SYS_005, "渲染被中断");
     }
     return out.toString();
+  }
+
+  @PreDestroy
+  void shutdown() {
+    renderExecutor.shutdown();
   }
 }

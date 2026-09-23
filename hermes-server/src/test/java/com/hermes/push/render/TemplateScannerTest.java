@@ -34,4 +34,20 @@ class TemplateScannerTest {
         .hasMessageContaining("命中危险指令")
         .hasMessageContaining("Execute");
   }
+
+  @Test void evalBuiltinIsBlocked() {
+    assertThatThrownBy(() -> scanner.scan("${payload?eval}"))
+        .isInstanceOf(BizException.class)
+        .hasMessageContaining("TPL-010")
+        .hasMessageContaining("命中危险指令")
+        .hasMessageContaining("?eval");
+  }
+
+  @Test void interpretBuiltinIsBlocked() {
+    assertThatThrownBy(() -> scanner.scan("<#assign x=\"${'hello'}\">${x?interpret}"))
+        .isInstanceOf(BizException.class)
+        .hasMessageContaining("TPL-010")
+        .hasMessageContaining("命中危险指令")
+        .hasMessageContaining("?interpret");
+  }
 }

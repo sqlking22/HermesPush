@@ -183,9 +183,10 @@ public class MarkdownRenderer {
     }
     // TRUNCATE：按 UTF-8 字节截断，不切断多字节字符，追加后缀
     int suffixLen = TRUNCATE_SUFFIX_BYTES.length;
-    if (maxBytes < suffixLen) {
-      // 极端情况：预算连后缀都放不下，直接返回后缀
-      return TRUNCATE_SUFFIX;
+    if (maxBytes <= suffixLen) {
+      // 预算扣除后缀后无剩余空间，视为配置错误
+      throw new BizException(ErrorCode.RD_002,
+          "maxBytes 配置过小，不足以容纳截断后缀（需要至少 " + (suffixLen + 1) + " 字节）");
     }
     int budget = maxBytes - suffixLen;
     // 从 budget 处向前回退到字符边界
