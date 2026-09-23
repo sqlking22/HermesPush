@@ -6,6 +6,7 @@ import com.hermes.push.task.TaskService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import java.time.LocalDate;
 import java.util.List;
@@ -15,6 +16,7 @@ import static org.awaitility.Awaitility.await;
 import java.time.Duration;
 
 @TestPropertySource(properties = "spring.quartz.auto-startup=true")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ScheduleSyncServiceTest extends AbstractIntegrationTest {
   @Autowired TaskService tasks; @Autowired ScheduleSyncService sync; @Autowired JdbcTemplate jdbc;
 

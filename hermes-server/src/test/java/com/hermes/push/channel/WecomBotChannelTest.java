@@ -64,4 +64,11 @@ class WecomBotChannelTest extends AbstractIntegrationTest {
     assertThat(pushRepo.existsSuccess(9001L, 1L, "a1", "markdown")).isTrue();
     assertThat(pushRepo.existsSuccess(9001L, 1L, "a1", "text")).isFalse(); // 消息类型维度独立
   }
+  @Test void unknownException_notRetryable_pushes012() {
+    PushResult r = channel.classifySendFailure(new RuntimeException("oops"));
+    assertThat(r.success()).isFalse();
+    assertThat(r.retryable()).isFalse();
+    assertThat(r.errorCode()).isEqualTo("PUSH-012");
+    assertThat(r.errorMsg()).contains("未预期的推送异常").contains("RuntimeException");
+  }
 }

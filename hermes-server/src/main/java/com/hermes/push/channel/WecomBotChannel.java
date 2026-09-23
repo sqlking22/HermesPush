@@ -74,24 +74,34 @@ public class WecomBotChannel implements PushChannel {
           .body(String.class);
 
       return parseResponse(response);
-    } catch (RestClientResponseException e) {
-      // HTTP 错误状态码（如 5xx）
-      int status = e.getStatusCode().value();
-      if (status >= 500) {
-        return new PushResult(false, true, ErrorCode.PUSH_011.getCode(),
-            "HTTP " + status + " " + e.getStatusText());
-      }
-      // 4xx 类错误统一归为 PUSH-012
-      return new PushResult(false, false, ErrorCode.PUSH_012.getCode(),
-          "HTTP " + status + " " + e.getStatusText());
-    } catch (ResourceAccessException e) {
-      // 网络异常 / 连接超时 / 读取超时
+    } catch (Exception e) {
+      return classifySendFailure(e);
+    }
+  }
+
+  /**
+   * 推送异常分类（包可见，便于测试）。
+   * <p>- ResourceAccessException（网络/超时）→ PUSH-011 retryable
+   * <p>- RestClientResponseException 且 5xx → PUSH-011 retryable
+   * <p>- RestClientResponseException 且 4xx → PUSH-012 not retryable
+   * <p>- 其余未知异常 → PUSH-012 not retryable（代码缺陷不应触发上层无限重试）
+   */
+  PushResult classifySendFailure(Exception e) {
+    if (e instanceof ResourceAccessException) {
       return new PushResult(false, true, ErrorCode.PUSH_011.getCode(),
           "网络异常或超时: " + e.getMessage());
-    } catch (Exception e) {
-      return new PushResult(false, true, ErrorCode.PUSH_011.getCode(),
-          "推送异常: " + e.getMessage());
     }
+    if (e instanceof RestClientResponseException re) {
+      int status = re.getStatusCode().value();
+      if (status >= 500) {
+        return new PushResult(false, true, ErrorCode.PUSH_011.getCode(),
+            "HTTP " + status + " " + re.getStatusText());
+      }
+      return new PushResult(false, false, ErrorCode.PUSH_012.getCode(),
+          "HTTP " + status + " " + re.getStatusText());
+    }
+    return new PushResult(false, false, ErrorCode.PUSH_012.getCode(),
+        "未预期的推送异常: " + e.getClass().getSimpleName());
   }
 
   private String buildBody(PushMessage msg) {
