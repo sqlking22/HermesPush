@@ -45,4 +45,24 @@ class DruidSqlValidatorTest {
   @Test void postgresFlavorOk() {
     assertThat(v.validate("SELECT 1", "POSTGRESQL")).isNotBlank();
   }
+  // ---- 评审轮 1 新增 ----
+  @Test void outfileCommentBypassRejected() {
+    BizException e = catchThrowableOfType(() -> v.validate("SELECT * FROM t INTO /*x*/ OUTFILE '/tmp/y'", "MYSQL"), BizException.class);
+    assertThat(e.getErrorCode().getCode()).isEqualTo("SQL-002");
+  }
+  @Test void forUpdateRejected() {
+    BizException e = catchThrowableOfType(() -> v.validate("SELECT a FROM t WHERE id=? FOR UPDATE", "MYSQL"), BizException.class);
+    assertThat(e.getErrorCode().getCode()).isEqualTo("SQL-002");
+  }
+  @Test void lockInShareModeRejected() {
+    BizException e = catchThrowableOfType(() -> v.validate("SELECT a FROM t LOCK IN SHARE MODE", "MYSQL"), BizException.class);
+    assertThat(e.getErrorCode().getCode()).isEqualTo("SQL-002");
+  }
+  @Test void unknownDsType_sql003() {
+    BizException e = catchThrowableOfType(() -> v.validate("SELECT 1", "SQLSERVER"), BizException.class);
+    assertThat(e.getErrorCode().getCode()).isEqualTo("SQL-003");
+  }
+  @Test void stringLiteralSemicolonPasses() {
+    assertThat(v.validate("SELECT ';' AS x", "MYSQL")).isNotBlank();
+  }
 }
