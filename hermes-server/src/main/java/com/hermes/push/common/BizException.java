@@ -1,16 +1,25 @@
 package com.hermes.push.common;
 
-/**
- * 业务异常（M1 最小版本，Task 3 将扩展）。
- * getMessage() 格式：{@code code + ": " + userMessage}
- */
+import lombok.Getter;
+
+@Getter
 public class BizException extends RuntimeException {
-    private final ErrorCode errorCode;
+  private final ErrorCode errorCode;
+  private final String detail;
 
-    public BizException(ErrorCode errorCode, Throwable cause) {
-        super(errorCode.getCode() + ": " + errorCode.getUserMessage(), cause);
-        this.errorCode = errorCode;
-    }
+  public BizException(ErrorCode ec, String detail) {
+    super(ec.getCode() + ": " + ec.getUserMessage() + (detail == null || detail.isBlank() ? "" : " | " + detail));
+    this.errorCode = ec;
+    this.detail = detail == null ? "" : detail;
+  }
 
-    public ErrorCode getErrorCode() { return errorCode; }
+  public BizException(ErrorCode ec, Throwable cause) {
+    super(ec.getCode() + ": " + ec.getUserMessage() + (cause.getMessage() == null ? "" : " | " + cause.getMessage()), cause);
+    this.errorCode = ec;
+    this.detail = cause.getMessage() == null ? "" : cause.getMessage();
+  }
+
+  public BizException(ErrorCode ec) {
+    this(ec, "");
+  }
 }

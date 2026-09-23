@@ -29,7 +29,7 @@ public class AesGcmCipher {
       ByteBuffer buf = ByteBuffer.allocate(1 + NONCE_LEN + body.length);
       buf.put(KEY_ID).put(nonce).put(body);
       return Base64.getEncoder().encodeToString(buf.array());
-    } catch (Exception e) { throw new BizException(ErrorCode.SYS_001_CRYPTO, e); }
+    } catch (Exception e) { throw new BizException(ErrorCode.SYS_001, e); }
   }
 
   public String decrypt(String cipherText) {
@@ -43,6 +43,6 @@ public class AesGcmCipher {
       Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
       c.init(Cipher.DECRYPT_MODE, keys.requireKey(), new GCMParameterSpec(TAG_BITS, nonce));
       return new String(c.doFinal(body), java.nio.charset.StandardCharsets.UTF_8);
-    } catch (Exception e) { throw new BizException(ErrorCode.SYS_001_CRYPTO, e); }
+    } catch (Exception e) { throw new BizException(ErrorCode.SYS_001, e); }
   }
 }
