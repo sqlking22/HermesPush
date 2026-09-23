@@ -25,6 +25,8 @@ public class PreviewService {
   private final JdbcTemplate jdbc;
 
   public PreviewVO preview(Long dsId, PreviewRequest req, String operator, String ip) {
+    // 数据源不存在/停用抛 BizException(SYS_003/SYS_002) 直接返回，不记 VALIDATION_FAILED 审计
+    // 该 scene 仅用于 SQL 内容校验失败，数据源问题由错误码与常规日志承载
     Datasource ds = dsSvc.getEnabled(dsId);
     try {
       validator.validate(req.sql(), ds.getType());
