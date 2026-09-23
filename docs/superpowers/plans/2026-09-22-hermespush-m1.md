@@ -20,7 +20,8 @@
 - 错误码分段（PRD FR-OPS-02）：DS-/SQL-/TPL-/RD-/PUSH-/STO-/SYS-；M1 用到的具体码在各任务中定义
 - 数据表前缀 `hp_`；DDL 全部进 Flyway `V1__init.sql`（任务 1），后续变更用递增版本号，禁止改已发布脚本
 - 敏感值（密码、webhook、secret）任何接口响应与日志不得出现明文；渠道 webhook 响应脱敏为 `域名/…末4位`
-- 测试命令统一 `.\mvnw.cmd -pl hermes-server test "-Dtest=类名"`（Windows PowerShell；`-Dtest` 参数须加引号）；集成测试用 Testcontainers（需本机 Docker Desktop 运行中）
+- 测试命令统一 `.\mvnw.cmd -pl hermes-server test "-Dtest=类名"`（Windows PowerShell；`-Dtest` 参数须加引号）；集成测试连**本地 MySQL 8**（localhost:3306，root/123456，测试库 `hermes_test` 由 URL 参数 `createDatabaseIfNotExist=true` 自动创建），**不使用 Testcontainers/Docker**（开发机为华为云电脑，存储受限，2026-09-23 用户决定）；测试连接配置放 `application-test.yaml`；隔离策略：`AbstractIntegrationTest` 每个测试方法前 `flyway.clean()+migrate()`（测试配置 `spring.flyway.clean-disabled: false`），测试库与业务库严格分离，root/123456 仅限本地开发库，生产凭据一律环境变量注入
+- Redis 依赖策略（同上原因，本地无 Redis）：限流走 `RateLimiterFactory` 接口，双实现按 `hermes.rate-limiter=local|redis` 切换（默认 `local`=单机内存令牌桶，供开发/测试；**生产多节点必须配 `redis`**，写入部署清单）；test/dev profile 经 `spring.autoconfigure.exclude` 排除 Redisson 与 Redis 自动配置，应用无 Redis 也能启动
 - 每个任务结束必须 commit；提交信息用 `feat|fix|test|chore(模块): 描述` 格式
 - 禁止引入计划外依赖；确需引入时在任务备注写明理由并先确认中央仓库坐标存在
 - 代码风格：构造器注入（Lombok `@RequiredArgsConstructor`），禁止字段注入 `@Autowired`；DTO 用 record；实体用 Lombok `@Data`
@@ -85,7 +86,7 @@ HermesPush/
 ```
 
 `hermes-server/pom.xml` 依赖清单（parent 指 spring-boot-starter-parent 3.3.4，用 `<dependencyManagement>` import 方式亦可；坐标必须逐一核对）：
-`spring-boot-starter-web`、`spring-boot-starter-jdbc`、`spring-boot-starter-validation`、`spring-boot-starter-quartz`、`spring-boot-starter-freemarker`、`mybatis-plus-spring-boot3-starter:3.5.7`、`flyway-core`+`flyway-mysql`（Boot 管版本）、`mysql-connector-j`(runtime)、`druid:1.2.23`、`redisson-spring-boot-starter:3.35.0`、`sa-token-spring-boot3-starter:1.39.0`、`lombok`(provided)、测试：`spring-boot-starter-test`、`testcontainers:mysql:1.20.1`+`testcontainers:junit-jupiter:1.20.1`、`org.wiremock:wiremock-standalone:3.9.1`。
+`spring-boot-starter-web`、`spring-boot-starter-jdbc`、`spring-boot-starter-validation`、`spring-boot-starter-quartz`、`spring-boot-starter-freemarker`、`mybatis-plus-spring-boot3-starter:3.5.7`、`flyway-core`+`flyway-mysql`（Boot 管版本）、`mysql-connector-j`(runtime)、`druid:1.2.23`、`redisson-spring-boot-starter:3.35.0`（生产限流用，测试 profile 排除自动配置）、`sa-token-spring-boot3-starter:1.39.0`、`lombok`(provided)、测试：`spring-boot-starter-test`、`org.wiremock:wiremock-standalone:3.9.1`、`org.awaitility:awaitility`（Boot 管版本）。**不引入 Testcontainers**（环境决议，见 Global Constraints）。
 构建插件：`spring-boot-maven-plugin`。
 
 - [ ] **Step 2: 生成 Maven Wrapper 并验证空构建**
@@ -267,8 +268,33 @@ hermes:
   master-key: ${HP_MASTER_KEY:}
   node-id: ${HOSTNAME:node-dev}
   worker: { concurrency: 4, poll-interval-ms: 2000 }
+  rate-limiter: ${HP_RATE_LIMITER:local}   # local=单机内存(开发默认) | redis=生产多节点
 server.port: 8080
 ```
+
+`src/test/resources/application-test.yaml`（集成测试统一配置）：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/hermes_test?createDatabaseIfNotExist=true&useSSL=false&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: ${HP_TEST_DB_PASSWORD:123456}
+  flyway: { enabled: true, clean-disabled: false, locations: classpath:db/migration }
+  autoconfigure.exclude:
+    - org.redisson.spring.starter.RedissonAutoConfigurationV2
+    - org.redisson.spring.starter.RedissonAutoConfiguration
+    - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+  quartz: { auto-startup: false }
+hermes:
+  master-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  rate-limiter: local
+  worker.concurrency: 0
+  auth.enabled: false
+  maintenance.enabled: false
+```
+
+（`autoconfigure.exclude` 的 Redisson 类名以实际引入版本的 spring.factories/AutoConfiguration.imports 为准，实现时核对；Quartz auto-startup 默认关，Task 13 测试用 `@TestPropertySource` 单独打开。）
 
 ```java
 package com.hermes.push;
@@ -285,7 +311,7 @@ public class HermesApplication {
 }
 ```
 
-- [ ] **Step 5: 写集成测试（上下文启动 + Flyway 迁移成功）**
+- [ ] **Step 5: 写集成测试（上下文启动 + Flyway 迁移成功，连本地 MySQL）**
 
 ```java
 package com.hermes.push;
@@ -294,29 +320,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@Testcontainers
+@ActiveProfiles("test")
 class HermesApplicationTest {
-  @Container
-  static MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
-      .withDatabaseName("hermes").withUsername("root").withPassword("root");
-
-  @DynamicPropertySource
-  static void props(DynamicPropertyRegistry r) {
-    r.add("spring.datasource.url", MYSQL::getJdbcUrl);
-    r.add("spring.datasource.username", MYSQL::getUsername);
-    r.add("spring.datasource.password", MYSQL::getPassword);
-    r.add("spring.data.redis.host", () -> "localhost"); // Redisson 懒连接，M1 测试不触达
-    r.add("hermes.master-key", () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="); // base64(32B) 测试密钥
-  }
-
   @Autowired JdbcTemplate jdbc;
 
   @Test
@@ -325,22 +334,28 @@ class HermesApplicationTest {
         "hp_task_version","hp_task_exec","hp_task_exec_push","hp_task_exec_artifact",
         "hp_sql_audit","hp_user","QRTZ_JOB_DETAILS"}) {
       Integer n = jdbc.queryForObject(
-          "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='hermes' AND table_name=?",
+          "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='hermes_test' AND table_name=?",
           Integer.class, t);
       assertThat(n).as("table %s exists", t).isEqualTo(1);
     }
-    // 队列领取 SQL 的生成列与唯一索引可用
+    // 队列领取 SQL 的生成列与唯一索引可用（先清表保证可重复执行）
+    jdbc.update("DELETE FROM hp_task_exec");
     jdbc.update("INSERT INTO hp_task_exec(task_id,task_version_id,trigger_type,priority,status,fire_time) VALUES (1,1,'CRON',40,'PENDING',NOW(3))");
     jdbc.update("INSERT INTO hp_task_exec(task_id,task_version_id,trigger_type,priority,status,fire_time) VALUES (1,1,'CRON',40,'PENDING',NOW(3)+INTERVAL 1 DAY)");
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM hp_task_exec", Integer.class)).isEqualTo(2);
+    // 同 (task,fire_time,trigger_type,idem='') 重复插入必须被唯一索引拒绝
+    assertThat(org.junit.jupiter.api.Assertions.assertThrows(Exception.class, () ->
+        jdbc.update("INSERT INTO hp_task_exec(task_id,task_version_id,trigger_type,priority,status,fire_time) VALUES (1,1,'CRON',40,'PENDING',NOW(3))"))).isNotNull();
   }
 }
 ```
 
+注意：重复插入断言里第二条 INSERT 的 fire_time 用 `NOW(3)` 与第一条同秒时才会撞唯一键，若因毫秒不同未撞键导致断言失败，改为显式固定时间：两条都用 `'2026-01-01 09:00:00.000'`。前置条件：本地 MySQL 8 已运行且 root/123456 可登录（`mysql -uroot -p123456 -e "SELECT VERSION()"` 验证）。
+
 - [ ] **Step 6: 跑测试**
 
 Run: `.\mvnw.cmd -pl hermes-server test "-Dtest=HermesApplicationTest"`
-Expected: PASS（首次会拉取 mysql:8.0 镜像，需要 Docker Desktop 运行中）
+Expected: PASS（需要本地 MySQL 8 运行中；`hermes_test` 库由 URL 参数自动创建）
 
 - [ ] **Step 7: Commit**
 
@@ -703,37 +718,27 @@ git commit -m "feat(common): 错误码字典(18码)+统一响应+全局异常处
 ```java
 package com.hermes.push;
 
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@Testcontainers
+@ActiveProfiles("test")
 public abstract class AbstractIntegrationTest {
-  static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
-      .withDatabaseName("hermes").withUsername("root").withPassword("root").withReuse(true);
-  static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
-      .withExposedPorts(6379).withReuse(true);
-  static { MYSQL.start(); REDIS.start(); }
-  @DynamicPropertySource
-  static void props(DynamicPropertyRegistry r) {
-    r.add("spring.datasource.url", MYSQL::getJdbcUrl);
-    r.add("spring.datasource.username", MYSQL::getUsername);
-    r.add("spring.datasource.password", MYSQL::getPassword);
-    r.add("spring.data.redis.host", REDIS::getHost);
-    r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
-    r.add("hermes.master-key", () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
-    r.add("spring.quartz.auto-startup", () -> "false"); // 单测不启调度
-    r.add("hermes.worker.concurrency", () -> "0");      // 单测不启 Worker
-    r.add("hermes.auth.enabled", () -> "false");        // 单测不走登录拦截（Task 20 定义该开关）
-  }
+  /** 本地 MySQL 测试库（hermes_test 由 URL 参数自动建库）；业务表每用例 clean+migrate 重建 */
+  public static final String TEST_DB_URL = "jdbc:mysql://localhost:3306/hermes_test?createDatabaseIfNotExist=true&useSSL=false&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true";
+  public static final String TEST_DB_USER = "root";
+  public static final String TEST_DB_PASSWORD = System.getenv().getOrDefault("HP_TEST_DB_PASSWORD", "123456");
+
+  @Autowired Flyway flyway;
+
+  @BeforeEach void resetSchema() { flyway.clean(); flyway.migrate(); } // 用例级隔离（无容器环境的替代方案）
 }
 ```
 
-（Redis 容器随基类自始提供：Task 15 限流测试直接可用；`hermes.auth.enabled=false` 属性在 Task 20 之前无消费方，Spring 对未绑定属性不报错。）
+（测试 profile 的连接、Redisson/Redis 自动配置排除、quartz/worker/auth/maintenance 开关全部在 Task 1 的 `application-test.yaml` 中，基类不再注入属性。`@BeforeEach resetSchema` 会重建全部表——重量级种子数据（如 Task 8 的 6 万行）必须放到独立的 `hermes_seed` 库，见 Task 8。）
 
 - [ ] **Step 2: 写失败测试**
 
@@ -918,20 +923,20 @@ class ConnectionTesterTest extends AbstractIntegrationTest {
   }
 
   @Test void okPath() {
-    var r = tester.test(build(MYSQL.getJdbcUrl(), "root", "root"));
+    var r = tester.test(build(TEST_DB_URL, TEST_DB_USER, TEST_DB_PASSWORD));
     assertThat(r.ok()).isTrue();
     assertThat(r.dbVersion()).contains("8.0");
   }
   @Test void wrongPassword_ds003() {
-    var r = tester.test(build(MYSQL.getJdbcUrl(), "root", "wrong"));
+    var r = tester.test(build(TEST_DB_URL, TEST_DB_USER, "wrong-password"));
     assertThat(r.ok()).isFalse(); assertThat(r.errorCode()).isEqualTo("DS-003");
   }
   @Test void unknownDb_ds001() {
-    var r = tester.test(build(MYSQL.getJdbcUrl().replace("/hermes", "/no_such_db"), "root", "root"));
+    var r = tester.test(build(TEST_DB_URL.replace("hermes_test", "no_such_db_xyz"), TEST_DB_USER, TEST_DB_PASSWORD));
     assertThat(r.ok()).isFalse(); assertThat(r.errorCode()).isEqualTo("DS-001");
   }
   @Test void unreachable_ds002() {
-    var r = tester.test(build("jdbc:mysql://127.0.0.1:1/x", "root", "root"));
+    var r = tester.test(build("jdbc:mysql://127.0.0.1:1/x?connectTimeout=3000", "root", "root"));
     assertThat(r.ok()).isFalse(); assertThat(r.errorCode()).isEqualTo("DS-002");
   }
 }
@@ -1380,28 +1385,32 @@ import static org.assertj.core.api.Assertions.*;
 class QueryEngineTest extends AbstractIntegrationTest {
   @Autowired QueryEngine engine;
   @Autowired DatasourceService svc;
-  @Autowired JdbcTemplate jdbc;
 
-  static boolean seeded = false; // 60k 行种子数据只灌一次（容器跨用例复用）
+  // 种子库与测试库分离：hermes_test 每用例被 flyway clean 重建，6 万行 big_t 放 hermes_seed（每 JVM 只灌一次，不受 clean 影响）
+  static final String SEED_DB_URL = TEST_DB_URL.replace("hermes_test", "hermes_seed");
+  static boolean seeded = false;
 
   Long dsId(int maxRows, String overflow, int timeoutSec) {
     Long id = svc.save(new DatasourceSaveRequest("qe-" + System.nanoTime(), "MYSQL",
-        MYSQL.getJdbcUrl(), "root", "root", true, maxRows, timeoutSec, 2, overflow), "admin");
+        SEED_DB_URL, TEST_DB_USER, TEST_DB_PASSWORD, true, maxRows, timeoutSec, 2, overflow), "admin");
     return id;
   }
 
   void seedRows() {
     if (seeded) return;
-    jdbc.execute("CREATE TABLE IF NOT EXISTS big_t (id INT PRIMARY KEY, d DATE, amt DECIMAL(12,2))");
-    Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM big_t", Integer.class);
-    if (n == 0) {
-      StringBuilder sb = new StringBuilder("INSERT INTO big_t VALUES ");
-      for (int i = 1; i <= 60001; i++) {
-        sb.append("(").append(i).append(",'2026-09-21',").append(i).append(".5)");
-        if (i < 60001) sb.append(",");
+    try (java.sql.Connection c = java.sql.DriverManager.getConnection(SEED_DB_URL, TEST_DB_USER, TEST_DB_PASSWORD);
+         java.sql.Statement st = c.createStatement()) {
+      st.execute("CREATE TABLE IF NOT EXISTS big_t (id INT PRIMARY KEY, d DATE, amt DECIMAL(12,2))");
+      var rs = st.executeQuery("SELECT COUNT(*) FROM big_t"); rs.next();
+      if (rs.getInt(1) == 0) {
+        StringBuilder sb = new StringBuilder("INSERT INTO big_t VALUES ");
+        for (int i = 1; i <= 60001; i++) {
+          sb.append("(").append(i).append(",'2026-09-21',").append(i).append(".5)");
+          if (i < 60001) sb.append(",");
+        }
+        st.execute(sb.toString());
       }
-      jdbc.execute(sb.toString());
-    }
+    } catch (java.sql.SQLException e) { throw new RuntimeException(e); }
     seeded = true;
   }
 
@@ -2334,7 +2343,7 @@ git commit -m "feat(render): Freemarker沙箱(禁?new/?api+静态扫描+超时)+
   - `interface PushChannel { String type(); PushResult send(String webhookUrl, PushMessage msg, int rateLimitPerMin, int queueWaitTimeoutSec); }`
   - `WecomBotChannel implements PushChannel`，`type()="WEWORK_BOT"`
   - `WhitelistService.assertWebhookAllowed(String url)`——host 不在 `hp_whitelist(WEBHOOK_HOST)` 抛 `SYS_002`；`WhitelistService.isAllowed(String host) -> boolean`
-  - `RateLimiterFactory.acquire(String webhookUrl, int limitPerMin, int waitTimeoutSec) -> boolean`——Redisson `RRateLimiter`，key=`hermes:rl:`+sha256(url)，`trySetRate(OVERALL, limitPerMin, 60, SECONDS)`；false=等待超时
+  - `interface RateLimiterFactory { boolean acquire(String webhookUrl, int limitPerMin, int waitTimeoutSec); void evict(String webhookUrl); }`（false=等待超时）——**双实现按 `hermes.rate-limiter` 切换**：`LocalRateLimiterFactory`（默认，`@ConditionalOnProperty(name="hermes.rate-limiter", havingValue="local", matchIfMissing=true)`，单机内存令牌桶，key=sha256(url)）；`RedissonRateLimiterFactory`（`havingValue="redis"`，`RRateLimiter` key=`hermes:rl:`+sha256(url)，`trySetRate(OVERALL, limitPerMin, 60, SECONDS)`）。生产多节点部署必须配 redis（部署清单项）；本环境决议（无 Docker/Redis）下 M1 全程用 local，redis 实现的验证放到有 Redis 的部署联调阶段
   - `ExecPushRepository.markSuccess/markFailed/existsSuccess(long execId, long channelId, String artifactKey, String msgType)`——四元组幂等（评审修订 B2）
 - 企微响应分类：`errcode=0` 成功；`45009`（接口调用超频）与 HTTP 5xx/超时 → retryable `PUSH-011`；`93000/40001`（invalid webhook/secret）→ 不可重试 `PUSH-012`；其余 errcode → 不可重试 `PUSH-012`（detail 带 errcode+errmsg，实现时对照官方文档补全映射表常量 `WecomErrCodes`）
 
@@ -2421,14 +2430,15 @@ Expected: COMPILATION ERROR
 3. RestClient POST JSON（connect/read timeout 10s）；text 消息含 `mentioned_list`（空列表则省略字段）
 4. 解析 errcode 按分类表返回 PushResult；网络异常 → retryable PUSH-011
 
-`RateLimiterFactory`：`ConcurrentHashMap<String, RRateLimiter>` 缓存实例；**先 `setRate`（覆盖式，保证配置变更生效）再 `tryAcquire(1, waitTimeoutSec, TimeUnit.SECONDS)`**——注意 Redisson `setRate` 每次调用会重置窗口，改为 `trySetRate` + 配置变更时显式 `delete` 缓存 key（渠道保存钩子调用 `RateLimiterFactory.evict(webhookUrl)`）。
+`LocalRateLimiterFactory`：`ConcurrentHashMap<String, Bucket>`；Bucket 为 synchronized 令牌桶——容量与补充速率由首次 acquire 的 `limitPerMin` 决定（每分钟 limit 个令牌，按 `limit/60.0` 每秒补充），`acquire` 轮询等待（50ms 间隔）直至拿到令牌或超过 `waitTimeoutSec` 返回 false；`evict(url)` 移除对应 Bucket（渠道保存钩子调用，保证限流配置变更生效）。
+`RedissonRateLimiterFactory`：`ConcurrentHashMap<String, RRateLimiter>` 缓存实例；`trySetRate(OVERALL, limitPerMin, 60, SECONDS)`（不覆盖已有配置）+ `tryAcquire(1, waitTimeoutSec, TimeUnit.SECONDS)`；配置变更经 `evict`（内部 `getRateLimiter(key).delete()` 后移除缓存）。
 
 `ExecPushRepository`：MyBatis-Plus BaseMapper + `existsSuccess` 用 QueryWrapper（exec_id, channel_id, artifact_key, msg_type, status='SUCCESS'）；`markSuccess/markFailed` 用 `INSERT ... ON DUPLICATE KEY UPDATE status=?, error_code=?, error_msg=?, sent_at=NOW(3), retry_count=retry_count+?`（XML 手写）。
 
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `.\mvnw.cmd -pl hermes-server test "-Dtest=WecomBotChannelTest+WhitelistServiceTest"`
-Expected: 全部 PASS（Redis 容器已由 Task 4 基类提供，`localRateLimiterWaitsThenFails` 直接可用）
+Expected: 全部 PASS（限流走 local 内存实现，无需 Redis；`localRateLimiterWaitsThenFails` 用例验证令牌桶等待与超时）
 
 - [ ] **Step 5: Commit**
 
@@ -2564,7 +2574,7 @@ class ExecPipelineIntegrationTest extends AbstractIntegrationTest {
   Ctx setup(String sql, String template) throws Exception {
     jdbc.execute("CREATE TABLE IF NOT EXISTS sales(dt DATE, branch VARCHAR(32), amount DECIMAL(12,2))");
     jdbc.execute("INSERT IGNORE INTO sales VALUES ('2026-09-21','成都',312004.00),('2026-09-21','绵阳',208771.00)");
-    Long dsId = dsSvc.save(new DatasourceSaveRequest("e2e-" + System.nanoTime(), "MYSQL", MYSQL.getJdbcUrl(), "root", "root", true, null, 30, null, null), "admin");
+    Long dsId = dsSvc.save(new DatasourceSaveRequest("e2e-" + System.nanoTime(), "MYSQL", TEST_DB_URL, TEST_DB_USER, TEST_DB_PASSWORD, true, null, 30, null, null), "admin");
     Long chId = chSvc.save("测试群" + System.nanoTime(), "WEWORK_BOT",
         "{\"webhook\":\"http://localhost:" + wm.port() + "/cgi-bin/webhook/send?key=e2e\"}", 20, 5, true, "admin");
     var cfg = new TaskConfig(
@@ -2818,7 +2828,7 @@ git commit -m "feat(exec): Worker流水线(查询→渲染→推送→重试复�
 
 - [ ] **Step 1: 初始化工程**：`npm create vite@5 frontend -- --template vue`，装依赖，替换生成文件为上述清单；LoginView 按原型登录卡样式（角色切换演示去掉，M1 单管理员）。
 - [ ] **Step 2: 构建验证**：Run: `cd frontend; npm run build`　Expected: 构建成功且 `hermes-server/src/main/resources/static/index.html` 生成
-- [ ] **Step 3: 联调冒烟**：启动后端（Testcontainers 不适用于手工联调，用本机 docker 起 mysql+redis，`docker run -d -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=hermes mysql:8.0` 与 `docker run -d -p 6379:6379 redis:7-alpine`），设置 `$env:HP_MASTER_KEY`（用 Task 2 测试密钥）后 `.\mvnw.cmd -pl hermes-server spring-boot:run`，浏览器登录成功进入首页。
+- [ ] **Step 3: 联调冒烟**：启动后端：本地 MySQL 建运行库（`mysql -uroot -p123456 -e "CREATE DATABASE IF NOT EXISTS hermes DEFAULT CHARSET utf8mb4"`，Flyway 自动建表；与测试库 hermes_test 分离）；无需 Redis（`hermes.rate-limiter` 默认 local）；PowerShell 设 `$env:HP_MASTER_KEY`（用 Task 2 测试密钥）与 `$env:HP_DB_PASSWORD='123456'` 后 `.\mvnw.cmd -pl hermes-server spring-boot:run`，浏览器登录成功进入首页。
 - [ ] **Step 4: Commit** `git add frontend hermes-server/src/main/resources/static; git commit -m "feat(frontend): Vite+Vue3+ElementPlus骨架、axios错误码提示、登录页、设计令牌同步原型"`
 
 ---
@@ -2891,8 +2901,8 @@ services:
 
 `Dockerfile`：两阶段（`maven:3.9-eclipse-temurin-21` 构建 → `eclipse-temurin:21-jre` 运行，COPY static 已在构建内）。`.env.example` 含 `HP_MASTER_KEY=`（注释给出 openssl 生成命令 `openssl rand 32 | base64`）与 `HP_ADMIN_PASSWORD=`。
 
-**E2E 验收步骤（写入 docs/m1-acceptance.md，逐条对应 M1 验收标准）**：
-1. `docker compose up -d --build` → 打开 `http://localhost:8080` 登录
+**E2E 验收步骤（写入 docs/m1-acceptance.md，逐条对应 M1 验收标准；开发机无 Docker，按本地模式执行，compose 文件作为服务器部署交付物保留）**：
+1. 本地模式启动：MySQL 本地 `hermes` 库 + `$env:HP_MASTER_KEY`/`$env:HP_DB_PASSWORD` + `spring-boot:run` → 打开 `http://localhost:8080` 登录（有 Docker 的服务器上 `docker compose up -d --build` 等效）
 2. 新建数据源指向一个演示库（compose 内加 `seed` 服务或指向宿主机 MySQL），勾选只读确认，测试连接通过
 3. 渠道页新建企微机器人渠道：**用真实测试群 webhook**（或 WireMock 演示环境），健康检查通过
 4. 简单模式：场景"日报发群"→ 3 步 → 试运行（看到渲染预览）→ 发到测试群（收到 `[测试]` 消息）→ 上线
@@ -2908,8 +2918,8 @@ services:
 - 观测 SQL：`SELECT MAX(TIMESTAMPDIFF(SECOND, fire_time, updated_at)) FROM hp_task_exec WHERE ...`（完成 P95/P100）
 - 将实测数字与推算模型（50 任务 × 平均查询 2s + 渲染 0.2s + 推送 0.5s / 8 并发 ≈ 17s，无渲染重负载）写入 `docs/m1-acceptance.md` 的压测小节，并给出 M3 转图交付后的复测计划
 
-- [ ] **Step 1: 编写 compose/Dockerfile/验收文档/压测脚本**
-- [ ] **Step 2: `docker compose up -d --build` 全绿，执行 E2E 步骤 1-9 并把结果记入 docs/m1-acceptance.md**
+- [ ] **Step 1: 编写 compose/Dockerfile/验收文档/压测脚本**（compose/Dockerfile 为服务器部署交付物；开发机无 Docker 时仅做 YAML 静态检查，无法本机验证的项在验收记录中标注"待服务器环境验证"）
+- [ ] **Step 2: 本地模式执行 E2E 步骤 1-9 并把结果记入 docs/m1-acceptance.md**
 - [ ] **Step 3: 执行压测建模，记录数字**
 - [ ] **Step 4: 全量回归** `.\mvnw.cmd test`（所有任务测试一次跑通）
 - [ ] **Step 5: Commit** `git add deploy docs scripts; git commit -m "test(m1): docker-compose部署+E2E验收记录+峰值压测建模报告"`
