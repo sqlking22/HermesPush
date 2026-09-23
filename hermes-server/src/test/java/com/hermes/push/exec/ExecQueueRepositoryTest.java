@@ -9,7 +9,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.dao.DataIntegrityViolationException;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ExecQueueRepositoryTest extends AbstractIntegrationTest {
   @Autowired ExecQueueRepository queue;
@@ -60,10 +62,15 @@ class ExecQueueRepositoryTest extends AbstractIntegrationTest {
   @Test void retryWaitSetsDbTimeAndPromote() throws Exception {
     Long id = pending(40, "rw1");
     queue.claim("node-y");
-    queue.retryWait(id, "PUSH-011", "rate limited", 1);
+    assertThat(queue.retryWait(id, "PUSH-011", "rate limited", 1)).isTrue();
+    assertThat(queue.retryWait(id, "PUSH-011", "rate limited", 1)).isFalse(); // 已非 RUNNING
     Thread.sleep(1500);
     assertThat(queue.promoteDueRetries()).isEqualTo(1);
     assertThat(queue.getById(id).getStatus()).isEqualTo(ExecStatus.PENDING.name());
     assertThat(queue.getById(id).getRetryCount()).isEqualTo(1);
+  }
+  @Test void insertErrorNotSwallowedAsDuplicate() {
+    assertThrows(DataIntegrityViolationException.class, () ->
+      queue.insertPending(3L, 1L, TriggerType.API, 60, null, LocalDate.now(), "{}", "not-null-test"));
   }
 }

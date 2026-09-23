@@ -3,7 +3,7 @@
 <mapper namespace="com.hermes.push.exec.ExecQueueMapper">
 
   <insert id="insertPending" useGeneratedKeys="true" keyProperty="id">
-    INSERT IGNORE INTO hp_task_exec
+    INSERT INTO hp_task_exec
       (task_id, task_version_id, trigger_type, priority, status, fire_time, biz_date, params_json, idempotency_key)
     VALUES
       (#{taskId}, #{taskVersionId}, #{triggerType}, #{priority}, 'PENDING', #{fireTime}, #{bizDate}, #{paramsJson}, #{idempotencyKey})

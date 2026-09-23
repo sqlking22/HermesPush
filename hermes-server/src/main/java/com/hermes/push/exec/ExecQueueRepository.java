@@ -1,5 +1,6 @@
 package com.hermes.push.exec;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
@@ -26,8 +27,12 @@ public class ExecQueueRepository {
     exec.setBizDate(bizDate);
     exec.setParamsJson(paramsJson);
     exec.setIdempotencyKey(idemKey);
-    int rows = mapper.insertPending(exec);
-    return rows > 0 ? exec.getId() : null;
+    try {
+      int rows = mapper.insertPending(exec);
+      return rows > 0 ? exec.getId() : null;
+    } catch (DuplicateKeyException e) {
+      return null;
+    }
   }
 
   @Transactional
@@ -44,13 +49,13 @@ public class ExecQueueRepository {
     return mapper.heartbeat(execId, nodeId) > 0;
   }
 
-  public void retryWait(long execId, String errorCode, String errorMsg, int backoffSeconds) {
-    mapper.retryWait(execId, errorCode, errorMsg, backoffSeconds);
+  public boolean retryWait(long execId, String errorCode, String errorMsg, int backoffSeconds) {
+    return mapper.retryWait(execId, errorCode, errorMsg, backoffSeconds) > 0;
   }
 
-  public void finish(long execId, ExecStatus status, String stageCostsJson, Integer rowsTotal,
+  public boolean finish(long execId, ExecStatus status, String stageCostsJson, Integer rowsTotal,
       String errorCode, String errorMsg) {
-    mapper.finish(execId, status.name(), stageCostsJson, rowsTotal, errorCode, errorMsg);
+    return mapper.finish(execId, status.name(), stageCostsJson, rowsTotal, errorCode, errorMsg) > 0;
   }
 
   public int promoteDueRetries() {
