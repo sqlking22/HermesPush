@@ -3,18 +3,26 @@ package com.hermes.push.datasource;
 import com.hermes.push.common.BizException;
 import com.hermes.push.common.ErrorCode;
 import com.hermes.push.security.AesGcmCipher;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Set;
 
 @Service
-@RequiredArgsConstructor
 public class DatasourceService {
   private final DatasourceMapper mapper;
   private final AesGcmCipher cipher;
   private final JdbcTemplate jdbc;
+  private final ObjectProvider<HikariPoolRegistry> poolRegistryProvider;
+
+  public DatasourceService(DatasourceMapper mapper, AesGcmCipher cipher, JdbcTemplate jdbc,
+                           ObjectProvider<HikariPoolRegistry> poolRegistryProvider) {
+    this.mapper = mapper;
+    this.cipher = cipher;
+    this.jdbc = jdbc;
+    this.poolRegistryProvider = poolRegistryProvider;
+  }
 
   public Long save(DatasourceSaveRequest r, String operator) {
     validateRequest(r, true);
@@ -35,7 +43,12 @@ public class DatasourceService {
     if (r.password() != null && !r.password().isBlank()) d.setPasswordCipher(cipher.encrypt(r.password()));
     d.setRoConfirmed(r.roConfirmed() ? 1 : 0);
     mapper.updateById(d);
-    // 池缓存失效（Task 8 的 HikariPoolRegistry.evict(id)，此处经 ObjectProvider 可选注入避免循环）
+    evictPool(id);
+  }
+
+  private void evictPool(Long id) {
+    HikariPoolRegistry registry = poolRegistryProvider.getIfAvailable();
+    if (registry != null) registry.evict(id);
   }
 
   public void setStatus(Long id, boolean enable) {
@@ -51,6 +64,7 @@ public class DatasourceService {
     }
     d.setStatus(enable ? "ENABLED" : "DISABLED");
     mapper.updateById(d);
+    if (!enable) evictPool(id);
   }
 
   public Datasource getEnabled(Long id) {
