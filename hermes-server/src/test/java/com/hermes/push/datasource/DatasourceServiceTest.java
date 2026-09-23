@@ -5,6 +5,7 @@ import com.hermes.push.common.BizException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.*;
 
 class DatasourceServiceTest extends AbstractIntegrationTest {
@@ -41,5 +42,18 @@ class DatasourceServiceTest extends AbstractIntegrationTest {
     jdbc.update("INSERT INTO hp_task(name,task_key,task_type,status,owner,current_version_id) VALUES('t','t1','REPORT','ONLINE','admin',1)");
     jdbc.update("INSERT INTO hp_task_version(id,task_id,version_no,config_json) VALUES(1,1,1,JSON_OBJECT('datasets',JSON_ARRAY(JSON_OBJECT('datasourceId',?))))", id);
     assertThatThrownBy(() -> svc.setStatus(id, false)).isInstanceOf(BizException.class).hasMessageContaining("1 个上线任务");
+  }
+  @Test void updateRefreshesUpdatedAtByDb() throws InterruptedException {
+    Long id = svc.save(req("ds-e", "pwd"), "admin");
+    LocalDateTime createdBefore = jdbc.queryForObject("SELECT created_at FROM hp_datasource WHERE id=?", LocalDateTime.class, id);
+    LocalDateTime updatedBefore = jdbc.queryForObject("SELECT updated_at FROM hp_datasource WHERE id=?", LocalDateTime.class, id);
+    assertThat(createdBefore).isNotNull();
+    assertThat(updatedBefore).isNotNull();
+    Thread.sleep(30);
+    svc.update(id, req("ds-e-renamed", ""), "admin");
+    LocalDateTime createdAfter = jdbc.queryForObject("SELECT created_at FROM hp_datasource WHERE id=?", LocalDateTime.class, id);
+    LocalDateTime updatedAfter = jdbc.queryForObject("SELECT updated_at FROM hp_datasource WHERE id=?", LocalDateTime.class, id);
+    assertThat(createdAfter).isEqualTo(createdBefore);
+    assertThat(updatedAfter).isAfter(updatedBefore);
   }
 }

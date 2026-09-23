@@ -39,7 +39,7 @@ public class DatasourceService {
   }
 
   public void setStatus(Long id, boolean enable) {
-    require(id);
+    Datasource d = require(id);
     if (!enable) {
       Integer refs = jdbc.queryForObject(
         "SELECT COUNT(DISTINCT t.id) FROM hp_task t JOIN hp_task_version v ON v.id = t.current_version_id " +
@@ -49,7 +49,6 @@ public class DatasourceService {
       if (refs != null && refs > 0)
         throw new BizException(ErrorCode.SYS_002, "存在 " + refs + " 个上线任务引用该数据源，请先下线相关任务");
     }
-    Datasource d = require(id);
     d.setStatus(enable ? "ENABLED" : "DISABLED");
     mapper.updateById(d);
   }
