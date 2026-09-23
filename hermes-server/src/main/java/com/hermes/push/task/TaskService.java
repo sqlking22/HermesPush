@@ -1,10 +1,10 @@
 package com.hermes.push.task;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermes.push.common.BizException;
 import com.hermes.push.common.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TaskService {
@@ -69,7 +70,10 @@ public class TaskService {
     if (updated == 0) {
       throw new BizException(ErrorCode.SYS_004, "并发保存冲突");
     }
-    if ("ONLINE".equals(t.getStatus())) {
+    // 乐观锁更新成功后重新读取 status，避免使用旧快照判断 onCronChange
+    String freshStatus = jdbc.queryForObject(
+        "SELECT status FROM hp_task WHERE id=?", String.class, taskId);
+    if ("ONLINE".equals(freshStatus)) {
       syncPort.ifAvailable(p -> p.onCronChange(taskId, config.schedule().cron()));
     }
     return vid;
@@ -150,7 +154,8 @@ public class TaskService {
       TaskConfig cfg = om.readValue(v.getConfigJson(), TaskConfig.class);
       return new EffectiveConfig(taskId, vid, cfg, t.getCronExpr(), t.getOwner());
     } catch (Exception e) {
-      throw new BizException(ErrorCode.SYS_003, "配置反序列化失败 v" + v.getVersionNo());
+      log.error("配置反序列化失败 taskId={} versionId={} versionNo={}", taskId, vid, v.getVersionNo(), e);
+      throw new BizException(ErrorCode.SYS_003, "配置版本 v" + v.getVersionNo() + " 反序列化失败");
     }
   }
 
@@ -171,7 +176,8 @@ public class TaskService {
     try {
       v.setConfigJson(om.writeValueAsString(config));
     } catch (Exception e) {
-      throw new BizException(ErrorCode.SYS_003, "配置序列化失败: " + e.getMessage());
+      log.error("任务配置序列化失败 taskId={} versionNo={}", taskId, versionNo, e);
+      throw new BizException(ErrorCode.SYS_003, "任务配置序列化失败，请联系管理员");
     }
     v.setRemark(remark);
     v.setCreatedBy(operator);
