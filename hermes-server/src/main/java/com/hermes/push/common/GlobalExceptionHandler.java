@@ -12,11 +12,11 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(BizException.class)
   public ResponseEntity<ApiResponse<Map<String,Object>>> handleBiz(BizException e) {
     log.warn("biz error {}: {}", e.getErrorCode().getCode(), e.getDetail());
-    return ResponseEntity.ok((ApiResponse) ApiResponse.fail(e.getErrorCode(), e.getDetail()));
+    return ResponseEntity.ok(ApiResponse.fail(e.getErrorCode(), e.getDetail()));
   }
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiResponse<Map<String,Object>>> handleOther(Exception e) {
     log.error("unhandled", e);
-    return ResponseEntity.internalServerError().body((ApiResponse) ApiResponse.fail(ErrorCode.SYS_003, String.valueOf(e.getMessage())));
+    return ResponseEntity.internalServerError().body(ApiResponse.fail(ErrorCode.SYS_003, String.valueOf(e.getMessage())));
   }
 }
