@@ -77,14 +77,24 @@ class MarkdownRendererTest {
   @Test void concatenatedPayloadStillBlockedBySandbox() {
     // 证明：即使扫描层被拼接绕过，沙箱层仍然拦截 ?new 类解析（无 RCE）
     // 直接调 SandboxFreemarker.render 绕过 MarkdownRenderer 入口 scan
-    // 模板用字符串拼接构造 ?eval + ?new 调用，验证 ALLOWS_NOTHING_RESOLVER 生效
-    String template = "<#assign ev=\"?ev\" + \"al\">"
-        + "<#assign payload=\"'freemarker.template.utility.Execute'?n\" + \"ew()\">"
-        + "${payload${ev}}";
-    assertThatThrownBy(() -> fm.render("sandbox-probe", template, Map.of(), 5))
-        .isInstanceOf(BizException.class)
-        .hasMessageContaining("TPL-003");
-    // 关键：异常是模板/解析错误（ALLOWS_NOTHING_RESOLVER 拒绝类解析），不是命令执行输出
+    // 模板语法完全合法；?new 被字符串拼接拆开（扫描层看不见完整关键字）
+    // ?eval 在求值期执行拼接结果，触发 ALLOWS_NOTHING_RESOLVER 拒绝类实例化
+    String template = "<#assign cls=\"'freemarker.template.utility.Execute'?n\" + \"ew()\">"
+        + "<#assign ex=cls?eval>${ex('whoami')}";
+    BizException ex = catchThrowableOfType(() ->
+        fm.render("sandbox-probe", template, Map.of(), 5), BizException.class);
+    assertThat(ex).isNotNull();
+    // 1. 证明已过解析阶段（不是"模板解析失败"，死在求值期）
+    assertThat(ex.getDetail()).doesNotContain("模板解析失败");
+    // 2. 证明是 ALLOWS_NOTHING_RESOLVER 沙箱拒绝
+    //    特征消息："Instantiating freemarker.template.utility.Execute is not allowed
+    //    in the template for security reasons."
+    assertThat(ex.getDetail()).contains("not allowed");
+    assertThat(ex.getDetail()).contains("Execute");
+    // 3. 证明抛异常而非返回输出（whoami 未被执行，无命令输出）
+    assertThat(ex.getErrorCode().getCode()).startsWith("TPL-");
+    // 4. 定位证据：求值期 ?eval 触发的失败（FTL stack trace 显示 #assign ex = cls?eval）
+    assertThat(ex.getDetail()).contains("cls?eval");
   }
   @Test void enforceBytesTooSmallBudget_rd002() {
     // maxBytes 小于后缀长度时，即使 TRUNCATE 也无法在预算内输出 → RD_002
