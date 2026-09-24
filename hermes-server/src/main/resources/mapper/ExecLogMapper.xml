@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hermes.push.exec.ExecLogMapper">
+
+  <select id="selectExecPage" resultType="com.hermes.push.exec.vo.ExecListVO">
+    SELECT
+      e.id,
+      e.task_id AS taskId,
+      t.name AS taskName,
+      e.trigger_type AS triggerType,
+      e.status,
+      e.fire_time AS fireTime,
+      e.biz_date AS bizDate,
+      e.rows_total AS rowsTotal,
+      e.cost_ms AS costMs,
+      e.error_code AS errorCode,
+      tv.version_no AS ver,
+      e.node_id AS nodeId
+    FROM hp_task_exec e
+    LEFT JOIN hp_task t ON e.task_id = t.id
+    LEFT JOIN hp_task_version tv ON e.task_version_id = tv.id
+    <where>
+      <if test="taskId != null">AND e.task_id = #{taskId}</if>
+      <if test="status != null and status != ''">AND e.status = #{status}</if>
+      <if test="triggerType != null and triggerType != ''">AND e.trigger_type = #{triggerType}</if>
+      <if test="from != null">AND e.fire_time &gt;= #{from}</if>
+      <if test="to != null">AND e.fire_time &lt;= #{to}</if>
+    </where>
+    ORDER BY e.fire_time DESC
+  </select>
+
+  <select id="selectTodayCounts" resultType="java.util.Map">
+    SELECT
+      status,
+      COUNT(*) AS cnt
+    FROM hp_task_exec
+    WHERE fire_time &gt;= CURDATE()
+      AND fire_time &lt; CURDATE() + INTERVAL 1 DAY
+    GROUP BY status
+  </select>
+
+</mapper>
