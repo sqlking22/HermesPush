@@ -4,7 +4,7 @@
       <div class="logo">
         <span class="mark">H</span>HermesPush
       </div>
-      <div class="nav-group">{{ store.mode === 'simple' ? '' : '' }}</div>
+      <div class="nav-group">{{ store.mode === 'simple' ? '简单模式' : '专家模式' }}</div>
       <template v-for="item in navItems" :key="item.k">
         <div
           class="nav-item"
@@ -73,7 +73,11 @@ const expertNav = [
   { k: 'ds', i: '⛁', n: '数据源管理' },
   { k: 'ch', i: '➤', n: '渠道管理' },
   { k: 'execs', i: '⟳', n: '执行日志' },
-  { k: 'expert-placeholder', i: '⚙', n: '系统设置' }
+  { k: 'monitor', i: '📊', n: '监控告警（M4b）' },
+  { k: 'distribution', i: '👥', n: '分发清单（M5）' },
+  { k: 'audit', i: '✓', n: '审核工作台（M4a）' },
+  { k: 'audit-log', i: '📜', n: '审计中心（M4a）' },
+  { k: 'settings', i: '⚙', n: '系统设置（M4a）' }
 ]
 
 const navItems = computed(() => store.mode === 'simple' ? simpleNav : expertNav)
@@ -96,7 +100,11 @@ function go(key) {
 }
 
 function switchMode(mode) {
+  if (mode !== 'simple' && mode !== 'expert') return
+  if (store.mode === mode) return
   setMode(mode)
+  // 切换后跳首页，避免停留在当前模式不存在的页面
+  router.push({ name: 'home' })
 }
 
 async function handleLogout() {
