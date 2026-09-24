@@ -34,6 +34,11 @@ public class GlobalExceptionHandler {
     log.warn("bind error: {}", detail);
     return ResponseEntity.badRequest().body(ApiResponse.fail(ErrorCode.SYS_006, detail));
   }
+  @ExceptionHandler(cn.dev33.satoken.exception.NotLoginException.class)
+  public ResponseEntity<ApiResponse<Map<String,Object>>> handleNotLogin(cn.dev33.satoken.exception.NotLoginException e) {
+    log.warn("not login: {}", e.getType());
+    return ResponseEntity.status(401).body(ApiResponse.fail(ErrorCode.AUTH_002, e.getType()));
+  }
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiResponse<Map<String,Object>>> handleOther(Exception e) {
     log.error("unhandled", e);

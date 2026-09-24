@@ -22,4 +22,12 @@ hermes:
   worker: { concurrency: 4, poll-interval-ms: 2000 }
   rate-limiter: ${HP_RATE_LIMITER:local}
   render: { timeout-sec: 30 }
+  auth.enabled: ${HP_AUTH_ENABLED:true}
+sa-token:
+  token-name: Authorization
+  timeout: 28800
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
 server.port: 8080

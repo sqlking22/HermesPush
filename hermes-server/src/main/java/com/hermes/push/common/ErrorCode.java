@@ -23,7 +23,9 @@ public enum ErrorCode {
   SYS_003("SYS-003","资源不存在","检查 ID"),
   SYS_004("SYS-004","保存冲突，数据已被他人修改","刷新后重试"),
   SYS_005("SYS-005","渲染超时","简化模板或调大超时"),
-  SYS_006("SYS-006","请求参数校验失败","按提示填写后重试");
+  SYS_006("SYS-006","请求参数校验失败","按提示填写后重试"),
+  AUTH_001("AUTH-001","用户名或密码错误","请重新输入，连续失败将锁定账户(M4a)"),
+  AUTH_002("AUTH-002","未登录或会话已过期","请重新登录");
 
   private final String code, userMessage, suggestion;
   ErrorCode(String code, String userMessage, String suggestion) {
