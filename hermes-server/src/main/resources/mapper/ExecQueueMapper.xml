@@ -40,6 +40,9 @@
     WHERE status='RETRY_WAIT' AND next_retry_at &lt;= NOW(3)
   </update>
 
+  <!-- 不变量：RUNNING 状态的行必有 heartbeat_at（由 markRunning 原子写入）。
+       若未来新增其他置 RUNNING 的路径，必须同样写 heartbeat_at，
+       否则需在本 WHERE 补 heartbeat_at IS NULL 分支 -->
   <update id="recoverLostRunningRetry">
     UPDATE hp_task_exec
     SET status='RETRY_WAIT', error_code='NODE_LOST', error_msg='执行节点心跳失联',
@@ -50,6 +53,7 @@
       AND retry_count &lt; max_retry
   </update>
 
+  <!-- 同上不变量：RUNNING 必有 heartbeat_at -->
   <update id="recoverLostRunningFail">
     UPDATE hp_task_exec
     SET status='FAILED', error_code='NODE_LOST', error_msg='执行节点心跳失联且重试耗尽',
