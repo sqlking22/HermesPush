@@ -78,6 +78,10 @@ public class ExecWorker {
           }, 30, 30, TimeUnit.SECONDS);
           try {
             pipeline.run(exec);
+            // 心跳中断导致的放弃：清除标志（防污染下次执行），记录日志，继续领取
+            if (Thread.interrupted()) {
+              log.warn("exec {} 因心跳失联被放弃", execId);
+            }
           } finally {
             hbFuture.cancel(false);
             heartbeatScheduler.shutdownNow();

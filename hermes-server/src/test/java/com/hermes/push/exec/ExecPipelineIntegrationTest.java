@@ -116,4 +116,30 @@ class ExecPipelineIntegrationTest extends AbstractIntegrationTest {
     Integer vf = jdbc.queryForObject("SELECT COUNT(*) FROM hp_sql_audit WHERE scene='VALIDATION_FAILED'", Integer.class);
     assertThat(vf).isGreaterThanOrEqualTo(1);
   }
+  @Test void oversizedMarkdownTruncatedInPipeline() throws Exception {
+    // 构造超长模板 + maxBytes=200/TRUNCATE，验证流水线 enforceBytes 生效
+    StringBuilder longTpl = new StringBuilder("# 日报\n");
+    for (int i = 0; i < 50; i++) longTpl.append("${bizDate} 第").append(i).append("行内容填充\n");
+    String sql = "SELECT branch, amount FROM sales WHERE dt = #{bizDate}";
+    jdbc.execute("CREATE TABLE IF NOT EXISTS sales(dt DATE, branch VARCHAR(32), amount DECIMAL(12,2))");
+    jdbc.execute("INSERT IGNORE INTO sales VALUES ('2026-09-21','成都',312004.00),('2026-09-21','绵阳',208771.00)");
+    Long dsId = dsSvc.save(new DatasourceSaveRequest("e2e-" + System.nanoTime(), "MYSQL", TEST_DB_URL, TEST_DB_USER, TEST_DB_PASSWORD, true, null, 30, 1, null), "admin");
+    lastDsId = dsId;
+    Long chId = chSvc.save("测试群" + System.nanoTime(), "WEWORK_BOT",
+        "{\"webhook\":\"http://localhost:" + wm.port() + "/cgi-bin/webhook/send?key=e2e\"}", 20, 5, true, "admin");
+    var cfg = new TaskConfig(
+      List.of(new TaskConfig.DatasetDef("ds1", dsId, sql, List.of())),
+      List.of(new TaskConfig.ArtifactDef("a1", "MARKDOWN", longTpl.toString(), "TRUNCATE", 200)),
+      List.of(new TaskConfig.ChannelBinding(chId, List.of("a1"), "markdown")),
+      new TaskConfig.ScheduleDef("0 0 9 * * ?", -1, 10, 3, false));
+    Long taskId = tasks.create("E2E日报", "e2e-" + System.nanoTime(), cfg, null, "admin");
+    Long versionId = tasks.loadEffectiveConfig(taskId).taskVersionId();
+    Ctx c = new Ctx(dsId, chId, taskId, versionId);
+    Long execId = enqueue(c, TriggerType.TRIAL, "{}", LocalDate.of(2026, 9, 21));
+    runOne();
+    assertThat(queue.getById(execId).getStatus()).isEqualTo("SUCCESS");
+    String content = jdbc.queryForObject("SELECT content FROM hp_task_exec_artifact WHERE exec_id=?", String.class, execId);
+    assertThat(content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length).isLessThanOrEqualTo(200);
+    assertThat(content).endsWith("…（内容超长已截断）");
+  }
 }

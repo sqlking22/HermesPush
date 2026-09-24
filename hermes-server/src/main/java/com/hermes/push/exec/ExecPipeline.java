@@ -96,7 +96,7 @@ public class ExecPipeline {
       long q0 = System.nanoTime();
       Map<String, DatasetResult> results = new LinkedHashMap<>();
       for (var ds : eff.config().datasets()) {
-        if (Thread.interrupted()) return;
+        if (Thread.interrupted()) { Thread.currentThread().interrupt(); return; }
         Datasource datasource = dsSvc.getEnabled(ds.datasourceId());
         try {
           validator.validate(ds.sql(), datasource.getType());
@@ -117,20 +117,25 @@ public class ExecPipeline {
       long queryMs = (System.nanoTime() - q0) / 1_000_000;
       sc = new StageCosts(sc.queueMs(), queryMs, 0, 0);
 
-      if (Thread.interrupted()) return;
+      if (Thread.interrupted()) { Thread.currentThread().interrupt(); return; }
 
       // 阶段2：渲染
       long r0 = System.nanoTime();
       Map<String, RenderedArtifact> rendered = new LinkedHashMap<>();
       for (var a : eff.config().artifacts()) {
-        if (Thread.interrupted()) return;
+        if (Thread.interrupted()) { Thread.currentThread().interrupt(); return; }
         long a0 = System.nanoTime();
         try {
           RenderedArtifact ra = renderer.render(a, results, runtime, renderTimeoutSec);
-          rendered.put(a.key(), ra);
+          // enforceBytes：maxBytes 默认 4096（企微 markdown 限制），用处理后的 content 贯穿 artifact 与推送
+          int maxBytes = a.maxBytes() != null ? a.maxBytes() : 4096;
+          String enforcedContent = renderer.enforceBytes(ra.content(), maxBytes, a.overflowStrategy());
+          int enforcedBytes = enforcedContent.getBytes(StandardCharsets.UTF_8).length;
+          RenderedArtifact finalRa = new RenderedArtifact(ra.key(), ra.type(), enforcedContent, enforcedBytes);
+          rendered.put(a.key(), finalRa);
           long costMs = (System.nanoTime() - a0) / 1_000_000;
           artifactRepo.upsertInline(exec.getId(), a.key(), a.type(),
-              ra.content(), rowsOf(results), ra.bytes(), costMs);
+              enforcedContent, rowsOf(results), enforcedBytes, costMs);
         } catch (Exception e) {
           log.warn("artifact render failed exec={} key={}", exec.getId(), a.key(), e);
           artifactRepo.upsertError(exec.getId(), a.key(), a.type(),
@@ -141,7 +146,7 @@ public class ExecPipeline {
       long renderMs = (System.nanoTime() - r0) / 1_000_000;
       sc = new StageCosts(sc.queueMs(), sc.queryMs(), renderMs, 0);
 
-      if (Thread.interrupted()) return;
+      if (Thread.interrupted()) { Thread.currentThread().interrupt(); return; }
 
       // 阶段3：推送（TRIAL 跳过）
       if (!TriggerType.TRIAL.name().equals(exec.getTriggerType())) {
@@ -154,12 +159,12 @@ public class ExecPipeline {
             ? Long.valueOf(runtime.get("__testChannelId")) : null;
 
         for (var b : eff.config().channelBindings()) {
-          if (Thread.interrupted()) return;
+          if (Thread.interrupted()) { Thread.currentThread().interrupt(); return; }
           // TEST 触发：仅推送 __testChannelId 指定的绑定
           if (isTest && testChannelId != null && !b.channelId().equals(testChannelId)) continue;
 
           for (String ak : b.artifactKeys()) {
-            if (Thread.interrupted()) return;
+            if (Thread.interrupted()) { Thread.currentThread().interrupt(); return; }
             if (pushRepo.existsSuccess(exec.getId(), b.channelId(), ak, b.msgType())) {
               anySuccess = true;
               continue;
