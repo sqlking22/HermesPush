@@ -1,5 +1,6 @@
 package com.hermes.push.security;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.hermes.push.common.ApiResponse;
@@ -46,6 +47,10 @@ public class AuthController {
   public ApiResponse<Map<String, Object>> me() {
     Long userId = StpUtil.getLoginIdAsLong();
     User user = userMapper.selectById(userId);
+    if (user == null) {
+      StpUtil.logout();
+      throw new NotLoginException("用户不存在", NotLoginException.TOKEN_TIMEOUT, null);
+    }
     return ApiResponse.ok(Map.of(
         "username", user.getUsername(),
         "role", user.getRole()

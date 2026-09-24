@@ -6,6 +6,7 @@ import com.hermes.push.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,6 +24,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper om;
   @Autowired AdminUserInitializer initializer;
+  @Autowired JdbcTemplate jdbc;
 
   @org.junit.jupiter.api.BeforeEach
   void seedAdmin() {
@@ -87,5 +89,26 @@ class AuthControllerTest extends AbstractIntegrationTest {
         noBody.path("data").path("errorCode").asText());
     assertEquals(pwdBody.path("data").path("detail").asText(),
         noBody.path("data").path("detail").asText());
+  }
+
+  @Test
+  void deletedUserMeReturns401() throws Exception {
+    // 1. 登录拿到 token
+    MvcResult loginResult = mvc.perform(post("/api/auth/login")
+            .contentType("application/json")
+            .content("{\"username\":\"admin\",\"password\":\"hermes@2026\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(0))
+        .andReturn();
+    String token = om.readTree(loginResult.getResponse().getContentAsString())
+        .path("data").path("token").asText();
+
+    // 2. 删除该用户（token 仍在 Sa-Token 缓存中但用户已删）
+    jdbc.update("DELETE FROM hp_user WHERE username='admin'");
+
+    // 3. 带 token 访问 /api/auth/me → 401 + AUTH-002
+    mvc.perform(get("/api/auth/me").header("Authorization", token))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.data.errorCode").value("AUTH-002"));
   }
 }
