@@ -164,7 +164,7 @@ public class ExecLogService {
         if (t != null) triggers.add(t);
       }
 
-      LocalDateTime now = LocalDateTime.now();
+      LocalDateTime now = LocalDateTime.now(SH);
       LocalDateTime oneHourLater = now.plusHours(1);
 
       List<NextTriggerVO> result = new ArrayList<>();
