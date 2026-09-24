@@ -30,11 +30,19 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
+  const hasToken = !!store.token
+  // 已登录用户访问登录页 → 跳首页
+  if (to.path === '/login' && hasToken) {
+    next('/home')
+    return
+  }
+  // 公开页直接放行
   if (to.meta.public) {
     next()
     return
   }
-  if (!store.token) {
+  // 无 token → 跳登录
+  if (!hasToken) {
     next('/login')
     return
   }

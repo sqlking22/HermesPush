@@ -13,6 +13,14 @@ spring:
       org.quartz.jobStore.isClustered: true
       org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
   jackson: { time-zone: Asia/Shanghai }
+  autoconfigure.exclude:
+    - org.redisson.spring.starter.RedissonAutoConfigurationV2
+    - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+    - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  data.redis:
+    host: ${HP_REDIS_HOST:localhost}
+    port: ${HP_REDIS_PORT:6379}
+    password: ${HP_REDIS_PASSWORD:}
 mybatis-plus:
   mapper-locations: classpath*:mapper/*.xml
   configuration.map-underscore-to-camel-case: true
