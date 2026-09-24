@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -17,7 +18,7 @@ class ExecQueueRepositoryTest extends AbstractIntegrationTest {
   @Autowired ExecQueueRepository queue;
   @Autowired JdbcTemplate jdbc;
 
-  @BeforeEach void clean() { jdbc.update("DELETE FROM hp_task_exec"); }
+  @BeforeEach void clean() { jdbc.update("TRUNCATE TABLE hp_task_exec"); }
 
   Long pending(int priority, String idem) {
     return queue.insertPending(1L, 1L, TriggerType.CRON, priority,
@@ -39,7 +40,18 @@ class ExecQueueRepositoryTest extends AbstractIntegrationTest {
     var futures = new java.util.ArrayList<Future<?>>();
     for (int t = 0; t < 3; t++) futures.add(pool.submit(() -> {
       try { start.await(); } catch (InterruptedException ignored) {}
-      while (queue.claim("node-" + Thread.currentThread().threadId()).isPresent()) claimed.incrementAndGet();
+      while (true) {
+        try {
+          if (queue.claim("node-" + Thread.currentThread().threadId()).isPresent()) {
+            claimed.incrementAndGet();
+          } else {
+            break;
+          }
+        } catch (DeadlockLoserDataAccessException e) {
+          // 并发 claim 偶发死锁（gap lock × 多线程 SELECT+UPDATE），重试一次即可
+          try { Thread.sleep(20); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+        }
+      }
     }));
     start.countDown();
     for (var f : futures) f.get(30, TimeUnit.SECONDS);

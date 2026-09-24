@@ -110,4 +110,30 @@ class ChannelServiceTest extends AbstractIntegrationTest {
     assertThat(enabledVo.status()).isEqualTo("ENABLED");
     assertThat(disabledVo.status()).isEqualTo("DISABLED");
   }
+
+  @Test void updateWithBlankWebhookKeepsOld() {
+    // 1. 新建渠道
+    Long id = svc.save("留空测试群", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=ORIGINAL\"}",
+        20, 300, false, "admin");
+    assertThat(svc.getDecryptedWebhook(id)).contains("ORIGINAL");
+
+    // 2. update 传空 webhook，应保留旧值，且限流等其他字段正常更新
+    svc.update(id, "留空测试群-改名", "WEWORK_BOT",
+        "{\"webhook\":\"\"}",
+        99, 250, true, "admin");
+    assertThat(svc.getDecryptedWebhook(id)).contains("ORIGINAL");
+
+    ChannelVO vo = svc.list().stream().filter(v -> v.id().equals(id)).findFirst().orElseThrow();
+    assertThat(vo.name()).isEqualTo("留空测试群-改名");
+    assertThat(vo.rateLimitPerMin()).isEqualTo(99);
+    assertThat(vo.waitTimeoutSec()).isEqualTo(250);
+    assertThat(vo.testFlag()).isTrue();
+
+    // 3. 显式传新 webhook（白名单内）时正常更新
+    svc.update(id, "留空测试群-改名", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=CHANGED\"}",
+        99, 250, true, "admin");
+    assertThat(svc.getDecryptedWebhook(id)).contains("CHANGED");
+  }
 }

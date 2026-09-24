@@ -118,12 +118,12 @@
         <el-input v-model="form.name" placeholder="如：销售一大群机器人" />
       </el-form-item>
       <el-form-item
-        :label="isEdit ? 'Webhook 地址（需重新填写，凭据加密不回显）' : 'Webhook 地址'"
-        required
+        :label="isEdit ? 'Webhook 地址（留空=不修改，凭据加密不回显）' : 'Webhook 地址'"
+        :required="!isEdit"
       >
         <el-input
           v-model="form.webhook"
-          placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+          :placeholder="isEdit ? '留空表示不修改' : 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…'"
           @input="onWebhookInput"
         />
         <div v-if="webhookError" style="color:var(--danger);font-size:12px;margin-top:4px">
@@ -254,8 +254,7 @@ function openCreate() {
 function openEdit(ch) {
   isEdit.value = true
   editId.value = ch.id
-  // 编辑时 webhook 不回显明文（安全原因），需重新填写以修改
-  // 不填则后端保持原 webhook 不变（通过空字符串标识）
+  // 编辑时 webhook 不回显明文（安全原因），留空表示不修改，后端会合并旧 webhook
   form.value = {
     type: ch.type,
     name: ch.name,
@@ -273,11 +272,7 @@ async function handleSave() {
     ElMessage.warning('请填写必填项')
     return
   }
-  if (!form.value.webhook && !isEdit.value) {
-    ElMessage.warning('请填写 Webhook 地址')
-    return
-  }
-  if (!form.value.webhook) {
+  if (!isEdit.value && !form.value.webhook) {
     ElMessage.warning('请填写 Webhook 地址')
     return
   }

@@ -100,6 +100,7 @@ public class ChannelService {
 
   /**
    * 按 ID 更新渠道。不存在或已删除抛 SYS_003；name 冲突抛 SYS_002。
+   * configJson 中 webhook 为空/缺失时，保留旧 webhook（与密码字段"留空=不修改"模式对称）。
    */
   @Transactional
   public void update(Long id, String name, String type, String configJson,
@@ -108,11 +109,38 @@ public class ChannelService {
     Channel ch = requireActiveChannel(id);
     // 2. 校验 type
     validateType(type);
-    // 3. 解析 configJson 取 webhook
-    String newWebhook = extractWebhook(configJson);
+    // 3. 解析 configJson 取 webhook；空/缺失时保留旧 webhook（合并进新 configJson）
+    String newWebhook;
+    String effectiveConfigJson;
+    try {
+      JsonNode root = objectMapper.readTree(configJson);
+      JsonNode webhookNode = root.path("webhook");
+      if (webhookNode.isMissingNode() || webhookNode.asText().isBlank()) {
+        // webhook 留空 → 合并旧 webhook，其余字段用新值
+        String oldWebhook = decryptWebhook(ch.getConfigCipher());
+        var node = objectMapper.createObjectNode();
+        // 先复制新 configJson 全部字段（排除空 webhook）
+        if (root.isObject()) {
+          root.fields().forEachRemaining(e -> {
+            if (!"webhook".equals(e.getKey())) node.set(e.getKey(), e.getValue());
+          });
+        }
+        if (oldWebhook != null) node.put("webhook", oldWebhook);
+        effectiveConfigJson = objectMapper.writeValueAsString(node);
+        newWebhook = oldWebhook;
+      } else {
+        effectiveConfigJson = configJson;
+        newWebhook = webhookNode.asText();
+      }
+    } catch (BizException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new BizException(ErrorCode.SYS_006, "configJson 解析失败: " + e.getMessage());
+    }
     String oldWebhook = decryptWebhook(ch.getConfigCipher());
-    // 4. webhook 变更时重新白名单校验 + evict 新旧缓存
-    if (oldWebhook == null || !oldWebhook.equals(newWebhook)) {
+    // 4. webhook 变更时重新白名单校验 + evict 新旧缓存；未变则跳过
+    boolean webhookChanged = (oldWebhook == null) ? (newWebhook != null) : !oldWebhook.equals(newWebhook);
+    if (webhookChanged) {
       whitelistService.assertWebhookAllowed(newWebhook);
       if (oldWebhook != null) rateLimiter.evict(oldWebhook);
       rateLimiter.evict(newWebhook);
@@ -128,7 +156,7 @@ public class ChannelService {
     }
     // 6. 更新字段
     ch.setType(type);
-    ch.setConfigCipher(cipher.encrypt(configJson));
+    ch.setConfigCipher(cipher.encrypt(effectiveConfigJson));
     ch.setRateLimitPerMin(rateLimitPerMin);
     ch.setQueueWaitTimeoutSec(waitTimeoutSec);
     ch.setTestFlag(testFlag ? 1 : 0);
