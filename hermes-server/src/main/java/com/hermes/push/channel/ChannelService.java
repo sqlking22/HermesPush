@@ -9,6 +9,7 @@ import com.hermes.push.datasource.TestResultVO;
 import com.hermes.push.security.AesGcmCipher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,44 +61,28 @@ public class ChannelService {
   }
 
   /**
-   * 保存渠道（新建或更新，按 name 唯一键判断）。
+   * 新建渠道。name 已存在（未删除）抛 SYS_002 "渠道名已存在"。
    * M1 阶段 type 仅允许 WEWORK_BOT；configJson 必须含 webhook 字段。
    *
-   * @return 渠道 ID
+   * @return 新建渠道 ID
    */
   @Transactional
   public Long save(String name, String type, String configJson, int rateLimitPerMin,
       int waitTimeoutSec, boolean testFlag, String operator) {
     // 1. 校验 type
-    if (!ALLOWED_TYPES.contains(type)) {
-      throw new BizException(ErrorCode.SYS_002, "渠道类型未开放: " + type);
-    }
+    validateType(type);
     // 2. 解析 configJson 取 webhook
     String webhook = extractWebhook(configJson);
     // 3. 白名单校验
     whitelistService.assertWebhookAllowed(webhook);
     // 4. 加密 config
     String configCipher = cipher.encrypt(configJson);
-
-    // 5. 查询是否已有同名渠道（更新场景）
-    Channel existing = mapper.selectOne(new QueryWrapper<Channel>().eq("name", name));
-    if (existing != null) {
-      // 更新：先 evict 旧 webhook 的限流缓存
-      String oldWebhook = decryptWebhook(existing.getConfigCipher());
-      if (oldWebhook != null && !oldWebhook.equals(webhook)) {
-        rateLimiter.evict(oldWebhook);
-      }
-      rateLimiter.evict(webhook);
-
-      existing.setType(type);
-      existing.setConfigCipher(configCipher);
-      existing.setRateLimitPerMin(rateLimitPerMin);
-      existing.setQueueWaitTimeoutSec(waitTimeoutSec);
-      existing.setTestFlag(testFlag ? 1 : 0);
-      mapper.updateById(existing);
-      return existing.getId();
+    // 5. 校验 name 唯一（未删除渠道）
+    Channel duplicate = mapper.selectOne(new QueryWrapper<Channel>()
+        .eq("name", name).eq("deleted", 0));
+    if (duplicate != null) {
+      throw new BizException(ErrorCode.SYS_002, "渠道名已存在: " + name);
     }
-
     // 6. 新建
     Channel ch = new Channel();
     ch.setName(name);
@@ -111,6 +96,43 @@ public class ChannelService {
     ch.setCreatedBy(operator);
     mapper.insert(ch);
     return ch.getId();
+  }
+
+  /**
+   * 按 ID 更新渠道。不存在或已删除抛 SYS_003；name 冲突抛 SYS_002。
+   */
+  @Transactional
+  public void update(Long id, String name, String type, String configJson,
+      int rateLimitPerMin, int waitTimeoutSec, boolean testFlag, String operator) {
+    // 1. 按 id 查询（已删除视为不存在）
+    Channel ch = requireActiveChannel(id);
+    // 2. 校验 type
+    validateType(type);
+    // 3. 解析 configJson 取 webhook
+    String newWebhook = extractWebhook(configJson);
+    String oldWebhook = decryptWebhook(ch.getConfigCipher());
+    // 4. webhook 变更时重新白名单校验 + evict 新旧缓存
+    if (oldWebhook == null || !oldWebhook.equals(newWebhook)) {
+      whitelistService.assertWebhookAllowed(newWebhook);
+      if (oldWebhook != null) rateLimiter.evict(oldWebhook);
+      rateLimiter.evict(newWebhook);
+    }
+    // 5. name 变更时校验唯一
+    if (name != null && !name.equals(ch.getName())) {
+      Channel duplicate = mapper.selectOne(new QueryWrapper<Channel>()
+          .eq("name", name).eq("deleted", 0));
+      if (duplicate != null) {
+        throw new BizException(ErrorCode.SYS_002, "渠道名已存在: " + name);
+      }
+      ch.setName(name);
+    }
+    // 6. 更新字段
+    ch.setType(type);
+    ch.setConfigCipher(cipher.encrypt(configJson));
+    ch.setRateLimitPerMin(rateLimitPerMin);
+    ch.setQueueWaitTimeoutSec(waitTimeoutSec);
+    ch.setTestFlag(testFlag ? 1 : 0);
+    mapper.updateById(ch);
   }
 
   /**
@@ -139,12 +161,12 @@ public class ChannelService {
   }
 
   /**
-   * 列出所有启用且未删除的渠道（脱敏输出）。
+   * 列出所有未删除渠道（含停用，管理界面需看到停用渠道以执行启用操作）。
    */
   public List<ChannelVO> list() {
     List<Channel> list = mapper.selectList(new QueryWrapper<Channel>()
         .eq("deleted", 0)
-        .eq("status", "ENABLED"));
+        .orderByDesc("id"));
     return list.stream().map(this::toVO).toList();
   }
 
@@ -229,12 +251,20 @@ public class ChannelService {
         new QueryWrapper<Whitelist>().eq("type", type).eq("value", value));
     if (existing != null) return existing.getId();
 
-    Whitelist wl = new Whitelist();
-    wl.setType(type);
-    wl.setValue(value);
-    wl.setCreatedBy(operator);
-    whitelistMapper.insert(wl);
-    return wl.getId();
+    try {
+      Whitelist wl = new Whitelist();
+      wl.setType(type);
+      wl.setValue(value);
+      wl.setCreatedBy(operator);
+      whitelistMapper.insert(wl);
+      return wl.getId();
+    } catch (DuplicateKeyException e) {
+      // 并发插入兜底：唯一键冲突则重新查询返回既有 id
+      Whitelist dup = whitelistMapper.selectOne(
+          new QueryWrapper<Whitelist>().eq("type", type).eq("value", value));
+      if (dup != null) return dup.getId();
+      throw e; // 异常情况重抛
+    }
   }
 
   /**
@@ -274,9 +304,24 @@ public class ChannelService {
 
   // ---------- 私有方法 ----------
 
+  private void validateType(String type) {
+    if (!ALLOWED_TYPES.contains(type)) {
+      throw new BizException(ErrorCode.SYS_002, "渠道类型未开放: " + type);
+    }
+  }
+
   private Channel requireChannel(Long id) {
     Channel ch = mapper.selectById(id);
     if (ch == null) throw new BizException(ErrorCode.SYS_003, "渠道不存在: " + id);
+    return ch;
+  }
+
+  /** require 未删除的渠道（删除=不存在） */
+  private Channel requireActiveChannel(Long id) {
+    Channel ch = requireChannel(id);
+    if (ch.getDeleted() != null && ch.getDeleted() == 1) {
+      throw new BizException(ErrorCode.SYS_003, "渠道不存在: " + id);
+    }
     return ch;
   }
 

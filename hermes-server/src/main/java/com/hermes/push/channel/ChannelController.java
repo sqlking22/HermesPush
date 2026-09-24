@@ -30,7 +30,6 @@ public class ChannelController {
 
   @PutMapping("/{id}")
   public ApiResponse<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> req) {
-    // M1：按 name 更新；PutMapping id 用于 REST 风格兼容，内部按 name 定位
     String name = (String) req.get("name");
     String type = (String) req.get("type");
     String configJson = (String) req.get("configJson");
@@ -39,7 +38,7 @@ public class ChannelController {
     int waitTimeoutSec = req.get("waitTimeoutSec") != null
         ? ((Number) req.get("waitTimeoutSec")).intValue() : 300;
     boolean testFlag = req.get("testFlag") != null && (Boolean) req.get("testFlag");
-    service.save(name, type, configJson, rateLimitPerMin, waitTimeoutSec, testFlag, CurrentUserHolder.get());
+    service.update(id, name, type, configJson, rateLimitPerMin, waitTimeoutSec, testFlag, CurrentUserHolder.get());
     return ApiResponse.ok(null);
   }
 

@@ -53,4 +53,61 @@ class ChannelServiceTest extends AbstractIntegrationTest {
         .withRequestBody(matchingJsonPath("$.msgtype", equalTo("text")))
         .withRequestBody(matchingJsonPath("$.text.content", containing("健康检查"))));
   }
+
+  // --- 修复轮 1 新增测试 ---
+  @Test void putByIdUpdatesCorrectChannel() {
+    Long id1 = svc.save("渠道A", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k1\"}", 20, 300, false, "admin");
+    Long id2 = svc.save("渠道B", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k2\"}", 20, 300, false, "admin");
+    svc.update(id1, "渠道A", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k1\"}", 99, 300, false, "admin");
+    ChannelVO vo1 = svc.list().stream().filter(v -> v.id().equals(id1)).findFirst().orElseThrow();
+    ChannelVO vo2 = svc.list().stream().filter(v -> v.id().equals(id2)).findFirst().orElseThrow();
+    assertThat(vo1.rateLimitPerMin()).isEqualTo(99);
+    assertThat(vo2.rateLimitPerMin()).isEqualTo(20);
+  }
+  @Test void putWithOtherExistingNameRejected() {
+    Long id1 = svc.save("渠道X", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k1\"}", 20, 300, false, "admin");
+    svc.save("渠道Y", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k2\"}", 20, 300, false, "admin");
+    assertThatThrownBy(() -> svc.update(id1, "渠道Y", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k1\"}", 20, 300, false, "admin"))
+        .isInstanceOf(BizException.class).hasMessageContaining("渠道名已存在");
+  }
+  @Test void putDeletedChannelRejected() {
+    Long id = svc.save("待删渠道", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=kdel\"}", 20, 300, false, "admin");
+    svc.delete(id);
+    assertThatThrownBy(() -> svc.update(id, "待删渠道", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=kdel\"}", 20, 300, false, "admin"))
+        .isInstanceOf(BizException.class).hasMessageContaining("SYS-003");
+  }
+  @Test void whitelistPostDuplicateReturnsExistingId() {
+    // 预插一条同 (type,value) 模拟并发场景
+    Whitelist pre = new Whitelist();
+    pre.setType("WEBHOOK_HOST");
+    pre.setValue("concurrent.example.com");
+    pre.setCreatedBy("pre");
+    jdbc.update("INSERT INTO hp_whitelist(type,value,created_by) VALUES(?,?,?)",
+        pre.getType(), pre.getValue(), pre.getCreatedBy());
+    Long existingId = jdbc.queryForObject("SELECT id FROM hp_whitelist WHERE type=? AND value=?",
+        Long.class, "WEBHOOK_HOST", "concurrent.example.com");
+    Long returnedId = svc.saveWhitelist("WEBHOOK_HOST", "concurrent.example.com", "admin");
+    assertThat(returnedId).isEqualTo(existingId);
+  }
+  @Test void listIncludesDisabledChannels() {
+    Long enabledId = svc.save("启用渠道", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=en1\"}", 20, 300, false, "admin");
+    Long disabledId = svc.save("停用渠道", "WEWORK_BOT",
+        "{\"webhook\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=ds1\"}", 20, 300, false, "admin");
+    svc.setStatus(disabledId, false);
+    List<ChannelVO> list = svc.list();
+    assertThat(list).hasSize(2);
+    ChannelVO enabledVo = list.stream().filter(v -> v.id().equals(enabledId)).findFirst().orElseThrow();
+    ChannelVO disabledVo = list.stream().filter(v -> v.id().equals(disabledId)).findFirst().orElseThrow();
+    assertThat(enabledVo.status()).isEqualTo("ENABLED");
+    assertThat(disabledVo.status()).isEqualTo("DISABLED");
+  }
 }
