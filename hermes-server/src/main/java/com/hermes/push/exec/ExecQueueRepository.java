@@ -62,6 +62,12 @@ public class ExecQueueRepository {
     return mapper.promoteDueRetries();
   }
 
+  public int recoverLostRunning() {
+    int retry = mapper.recoverLostRunningRetry();
+    int fail = mapper.recoverLostRunningFail();
+    return retry + fail;
+  }
+
   public TaskExec getById(long execId) {
     return mapper.selectById(execId);
   }

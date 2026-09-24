@@ -23,6 +23,10 @@ public interface ExecQueueMapper extends BaseMapper<TaskExec> {
 
   int promoteDueRetries();
 
+  int recoverLostRunningRetry();
+
+  int recoverLostRunningFail();
+
   int finish(
       @Param("id") long id,
       @Param("status") String status,

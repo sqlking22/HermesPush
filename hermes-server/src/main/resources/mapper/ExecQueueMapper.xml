@@ -40,6 +40,25 @@
     WHERE status='RETRY_WAIT' AND next_retry_at &lt;= NOW(3)
   </update>
 
+  <update id="recoverLostRunningRetry">
+    UPDATE hp_task_exec
+    SET status='RETRY_WAIT', error_code='NODE_LOST', error_msg='执行节点心跳失联',
+        next_retry_at=NOW(3)+INTERVAL 30 SECOND, retry_count=retry_count+1,
+        node_id=NULL, heartbeat_at=NULL
+    WHERE status='RUNNING'
+      AND heartbeat_at &lt; NOW(3)-INTERVAL 120 SECOND
+      AND retry_count &lt; max_retry
+  </update>
+
+  <update id="recoverLostRunningFail">
+    UPDATE hp_task_exec
+    SET status='FAILED', error_code='NODE_LOST', error_msg='执行节点心跳失联且重试耗尽',
+        cost_ms=TIMESTAMPDIFF(MICROSECOND, created_at, NOW(3))/1000
+    WHERE status='RUNNING'
+      AND heartbeat_at &lt; NOW(3)-INTERVAL 120 SECOND
+      AND retry_count &gt;= max_retry
+  </update>
+
   <update id="finish">
     UPDATE hp_task_exec
     SET status=#{status}, stage_costs_json=#{stageCosts}, rows_total=#{rowsTotal},
