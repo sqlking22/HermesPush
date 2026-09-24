@@ -2,11 +2,14 @@ package com.hermes.push.task;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermes.push.common.ApiResponse;
 import com.hermes.push.common.BizException;
 import com.hermes.push.common.CurrentUserHolder;
 import com.hermes.push.common.ErrorCode;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.CronExpression;
@@ -17,9 +20,12 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -30,12 +36,12 @@ public class TaskController {
   private static final TimeZone SH = TimeZone.getTimeZone("Asia/Shanghai");
   private static final ZoneId SH_ZONE = ZoneId.of("Asia/Shanghai");
   private static final DateTimeFormatter ISO_DT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+  private static final Set<String> DELETABLE_STATUS = Set.of("DRAFT", "OFFLINE");
 
   private final TaskService taskService;
   private final TaskMapper taskMapper;
   private final TaskVersionMapper versionMapper;
   private final JdbcTemplate jdbc;
-  private final ObjectMapper om;
 
   public record TaskListVO(
       Long id, String name, String taskKey, String taskType, String status,
@@ -48,37 +54,27 @@ public class TaskController {
       String owner, Integer lockVersion, LocalDateTime createdAt, LocalDateTime updatedAt,
       Integer currentVersionNo, TaskConfig config) {}
 
+  public record TaskCreateRequest(
+      @NotBlank String name,
+      @NotBlank @Pattern(regexp = "^[a-z][a-z0-9_-]{1,63}$", message = "taskKey 必须以小写字母开头，可含数字/下划线/中划线，长度 2-64 位")
+      String taskKey,
+      @NotNull TaskConfig config,
+      String remark) {}
+
+  public record TaskUpdateRequest(
+      @NotNull TaskConfig config,
+      String remark,
+      @NotNull Integer lockVersion) {}
+
   @PostMapping
-  public ApiResponse<Map<String, Long>> create(@RequestBody Map<String, Object> body) {
-    String name = (String) body.get("name");
-    String taskKey = (String) body.get("taskKey");
-    String remark = body.get("remark") != null ? body.get("remark").toString() : null;
-    TaskConfig config = om.convertValue(body.get("config"), TaskConfig.class);
-    Long id = taskService.create(name, taskKey, config, remark, CurrentUserHolder.get());
+  public ApiResponse<Map<String, Long>> create(@Valid @RequestBody TaskCreateRequest req) {
+    Long id = taskService.create(req.name(), req.taskKey(), req.config(), req.remark(), CurrentUserHolder.get());
     return ApiResponse.ok(Map.of("taskId", id));
   }
 
   @PutMapping("/{id}")
-  public ApiResponse<Long> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-    TaskConfig config = body.get("config") != null
-        ? om.convertValue(body.get("config"), TaskConfig.class) : null;
-    String remark = body.get("remark") != null ? body.get("remark").toString() : null;
-    int lockVersion = body.get("lockVersion") != null
-        ? ((Number) body.get("lockVersion")).intValue() : 0;
-    Long versionId;
-    if (config != null) {
-      versionId = taskService.saveVersion(id, config, remark, lockVersion, CurrentUserHolder.get());
-    } else {
-      // 仅更新 remark 等字段（不走版本号机制）
-      Task t = taskMapper.selectById(id);
-      if (t == null || "DELETED".equals(t.getStatus())) {
-        throw new BizException(ErrorCode.SYS_003, "任务不存在: " + id);
-      }
-      if (remark != null) {
-        // 当前 Task 实体无 remark 字段，这里直接返回当前版本号
-      }
-      versionId = t.getCurrentVersionId();
-    }
+  public ApiResponse<Long> update(@PathVariable Long id, @Valid @RequestBody TaskUpdateRequest req) {
+    Long versionId = taskService.saveVersion(id, req.config(), req.remark(), req.lockVersion(), CurrentUserHolder.get());
     return ApiResponse.ok(versionId);
   }
 
@@ -102,9 +98,27 @@ public class TaskController {
     w.orderByDesc(Task::getId);
 
     IPage<Task> pageResult = taskMapper.selectPage(p, w);
+    List<Task> records = pageResult.getRecords();
+
+    // 批量查版本号（N+1 → 1）
+    List<Long> versionIds = records.stream()
+        .map(Task::getCurrentVersionId)
+        .filter(java.util.Objects::nonNull)
+        .collect(Collectors.toList());
+    Map<Long, Integer> versionNoMap = new HashMap<>();
+    if (!versionIds.isEmpty()) {
+      List<TaskVersion> versions = versionMapper.selectBatchIds(versionIds);
+      for (TaskVersion v : versions) {
+        versionNoMap.put(v.getId(), v.getVersionNo());
+      }
+    }
+
+    // 数据库 NOW() 只取一次，所有行复用
+    LocalDateTime now = jdbc.queryForObject("SELECT NOW(3)", LocalDateTime.class);
+
     IPage<TaskListVO> voPage = pageResult.convert(t -> {
-      String nextFire = computeNextFire(t.getStatus(), t.getCronExpr());
-      Integer verNo = lookupVersionNo(t.getCurrentVersionId());
+      String nextFire = computeNextFire(t.getStatus(), t.getCronExpr(), now);
+      Integer verNo = versionNoMap.get(t.getCurrentVersionId());
       Boolean pinned = t.getPinnedVersionId() != null;
       return new TaskListVO(
           t.getId(), t.getName(), t.getTaskKey(), t.getTaskType(), t.getStatus(),
@@ -120,7 +134,9 @@ public class TaskController {
       throw new BizException(ErrorCode.SYS_003, "任务不存在: " + id);
     }
     TaskService.EffectiveConfig eff = taskService.loadEffectiveConfig(id);
-    Integer verNo = lookupVersionNo(t.getCurrentVersionId());
+    TaskVersion current = t.getCurrentVersionId() != null
+        ? versionMapper.selectById(t.getCurrentVersionId()) : null;
+    Integer verNo = current != null ? current.getVersionNo() : null;
     TaskDetailVO vo = new TaskDetailVO(
         t.getId(), t.getName(), t.getTaskKey(), t.getTaskType(), t.getStatus(),
         t.getCronExpr(), t.getJitterEnabled(), t.getCurrentVersionId(), t.getPinnedVersionId(),
@@ -159,8 +175,8 @@ public class TaskController {
     if (t == null || "DELETED".equals(t.getStatus())) {
       throw new BizException(ErrorCode.SYS_003, "任务不存在: " + id);
     }
-    if ("ONLINE".equals(t.getStatus())) {
-      throw new BizException(ErrorCode.SYS_002, "已上线任务请先下线再删除");
+    if (!DELETABLE_STATUS.contains(t.getStatus())) {
+      throw new BizException(ErrorCode.SYS_002, "请先下线任务");
     }
     t.setStatus("DELETED");
     taskMapper.updateById(t);
@@ -169,19 +185,12 @@ public class TaskController {
 
   // ---------- helpers ----------
 
-  private Integer lookupVersionNo(Long versionId) {
-    if (versionId == null) return null;
-    TaskVersion v = versionMapper.selectById(versionId);
-    return v != null ? v.getVersionNo() : null;
-  }
-
-  private String computeNextFire(String status, String cronExpr) {
+  private String computeNextFire(String status, String cronExpr, LocalDateTime now) {
     if (cronExpr == null || cronExpr.isBlank()) return null;
     if (!List.of("ONLINE", "PAUSED").contains(status)) return null;
     try {
       CronExpression ce = new CronExpression(cronExpr);
       ce.setTimeZone(SH);
-      LocalDateTime now = jdbc.queryForObject("SELECT NOW(3)", LocalDateTime.class);
       Date from = Date.from(now.atZone(SH_ZONE).toInstant());
       Date next = ce.getNextValidTimeAfter(from);
       if (next == null) return null;

@@ -128,4 +128,44 @@ class TaskControllerTest extends AbstractIntegrationTest {
     LocalDateTime next = LocalDateTime.parse(nf);
     assertThat(next).isAfter(LocalDateTime.now());
   }
+
+  @Test
+  void createWithBlankNameRejected() throws Exception {
+    String body = "{\"name\":\"  \",\"taskKey\":\"bad-name\",\"config\":" + sampleConfig("0 0 9 * * ?") + "}";
+    mvc.perform(post("/api/tasks")
+            .contentType("application/json")
+            .content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(500))
+        .andExpect(jsonPath("$.data.errorCode").value("SYS-006"));
+  }
+
+  @Test
+  void createWithBadTaskKeyRejected() throws Exception {
+    String body = "{\"name\":\"坏任务\",\"taskKey\":\"Bad Key!\",\"config\":" + sampleConfig("0 0 9 * * ?") + "}";
+    mvc.perform(post("/api/tasks")
+            .contentType("application/json")
+            .content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(500))
+        .andExpect(jsonPath("$.data.errorCode").value("SYS-006"));
+  }
+
+  @Test
+  void deletePausedRejected() throws Exception {
+    String body = "{\"name\":\"日报D\",\"taskKey\":\"daily-d\",\"config\":" + sampleConfig("0 0 9 * * ?") + "}";
+    mvc.perform(post("/api/tasks")
+            .contentType("application/json")
+            .content(body))
+        .andExpect(status().isOk());
+    Long taskId = jdbc.queryForObject("SELECT id FROM hp_task WHERE task_key='daily-d'", Long.class);
+    // 直接置 PAUSED（不走 publish，避免依赖试运行）
+    jdbc.update("UPDATE hp_task SET status='PAUSED' WHERE id=?", taskId);
+
+    mvc.perform(delete("/api/tasks/" + taskId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(500))
+        .andExpect(jsonPath("$.data.errorCode").value("SYS-002"))
+        .andExpect(jsonPath("$.data.detail").value(org.hamcrest.Matchers.containsString("先下线")));
+  }
 }

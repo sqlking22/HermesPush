@@ -97,11 +97,19 @@
       </div>
 
       <div class="sec">
-        <div class="sec-h"><div class="sec-t"><span class="nb">2</span>编辑摘要模板</div></div>
+        <div class="sec-h">
+          <div class="sec-t"><span class="nb">2</span>编辑摘要模板</div>
+          <button class="btn sm" @click="generateDefaultTemplate" :disabled="!canGenerateTemplate">
+            生成默认模板
+          </button>
+        </div>
         <textarea class="inp" v-model="templateText" rows="10" style="font-family:Consolas,Menlo,monospace;font-size:12.5px"></textarea>
         <div class="hint">
           支持 FreeMarker 语法，使用 <code class="mono">${ds1.rows[0].列名}</code> 引用查询结果的第一行数据，<br>
           使用 <code class="mono">&lt;#list ds1.rows as r&gt;...&lt;/#list&gt;</code> 遍历多行
+        </div>
+        <div v-if="!canGenerateTemplate" class="hint" style="color:var(--warn-text);margin-top:6px">
+          提示：请先回到上一步执行"预览数据"，系统会根据返回的列名自动生成模板
         </div>
       </div>
 
@@ -294,7 +302,7 @@ const canStep1Next = computed(() => {
 })
 
 const canFinish = computed(() => {
-  return selectedChannels.value.length > 0 && finalCron.value && taskName.value.trim()
+  return selectedChannels.value.length > 0 && finalCron.value && taskName.value.trim() && templateText.value.trim().length > 0
 })
 
 const finalCron = computed(() => {
@@ -365,6 +373,23 @@ function goStep(i) {
   currentStep.value = i
 }
 
+const canGenerateTemplate = computed(() => {
+  return availableColumns.value.length > 0
+})
+
+function buildDefaultTemplate(cols) {
+  if (!cols || cols.length === 0) return ''
+  const titleLine = '### 昨日数据速报'
+  const fieldLines = cols.slice(0, 5).map(c => `- **${c}**：\${ds1.rows[0].${c}}`).join('\n')
+  const listSample = '\n\n完整明细：\n<#list ds1.rows as r>\n- ' + cols[0] + ': ${r.' + cols[0] + '}\n</#list>'
+  return titleLine + '\n\n' + fieldLines + listSample
+}
+
+function generateDefaultTemplate() {
+  if (availableColumns.value.length === 0) return
+  templateText.value = buildDefaultTemplate(availableColumns.value)
+}
+
 function insertField(field) {
   const text = '${ds1.rows[0].' + field + '}'
   templateText.value += text
@@ -405,10 +430,7 @@ async function previewData() {
       // 自动生成模板
       if (!templateText.value && res.data.columns.length > 0) {
         const cols = res.data.columns.map(c => c.name)
-        const titleLine = `### 昨日数据速报`
-        const fieldLines = cols.slice(0, 5).map(c => `- **${c}**：\${ds1.rows[0].${c}}`).join('\n')
-        const listSample = `\n\n完整明细：\n<#list ds1.rows as r>\n- ${cols[0]}: \${r.${cols[0]}}\n</#list>`
-        templateText.value = titleLine + '\n\n' + fieldLines + listSample
+        templateText.value = buildDefaultTemplate(cols)
       }
     }
   } catch (e) {
