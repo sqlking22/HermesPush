@@ -154,6 +154,8 @@ function formatTime(v) {
 }
 
 function todayRange() {
+  // M1 假设：浏览器时区 = 服务器时区（Asia/Shanghai），"今日"以此分界。
+  // 已知限制：跨时区访问时今日范围可能偏移约 1 天，M4a 国际化时统一处理。
   const now = new Date()
   const y = now.getFullYear()
   const m = String(now.getMonth() + 1).padStart(2, '0')

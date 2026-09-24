@@ -79,6 +79,7 @@
     <ExecDetailDrawer
       :visible="drawerVisible"
       :exec-id="currentExecId"
+      :task-name="currentTaskName"
       @close="closeDrawer"
     />
   </div>
@@ -91,6 +92,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHead from '../components/PageHead.vue'
 import ExecDetailDrawer from '../components/ExecDetailDrawer.vue'
 import { get, post } from '../api/http.js'
+import {
+  STATUS_OPTIONS, TRIGGER_OPTIONS,
+  statusBadge, statusLabel, triggerLabel
+} from '../utils/execEnums.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -106,44 +111,7 @@ const loading = ref(false)
 
 const drawerVisible = ref(false)
 const currentExecId = ref(null)
-
-const statusOptions = [
-  { value: 'SUCCESS', label: '成功' },
-  { value: 'PARTIAL_SUCCESS', label: '部分成功' },
-  { value: 'FAILED', label: '失败' },
-  { value: 'TIMEOUT', label: '超时' },
-  { value: 'RUNNING', label: '执行中' },
-  { value: 'PENDING', label: '排队中' },
-  { value: 'RETRY_WAIT', label: '等待重试' },
-  { value: 'CANCELLED', label: '已取消' }
-]
-const triggerOptions = ['CRON', 'MANUAL', 'TEST', 'TRIAL', 'API']
-
-function statusBadge(s) {
-  switch (s) {
-    case 'SUCCESS': return 'b-ok'
-    case 'PARTIAL_SUCCESS': return 'b-part'
-    case 'FAILED':
-    case 'TIMEOUT': return 'b-fail'
-    case 'RUNNING':
-    case 'PENDING': return 'b-run'
-    case 'RETRY_WAIT': return 'b-warn'
-    case 'CANCELLED': return 'b-gray'
-    default: return 'b-gray'
-  }
-}
-function statusLabel(s) {
-  const map = {
-    SUCCESS: '成功', PARTIAL_SUCCESS: '部分成功', FAILED: '失败',
-    TIMEOUT: '超时', RUNNING: '执行中', PENDING: '排队中',
-    RETRY_WAIT: '等待重试', CANCELLED: '已取消'
-  }
-  return map[s] || s || '—'
-}
-function triggerLabel(t) {
-  const map = { CRON: '定时', MANUAL: '手动', TEST: '测试', TRIAL: '试运行', API: 'API' }
-  return map[t] || t || '—'
-}
+const currentTaskName = ref('')
 function formatDT(v) {
   if (!v) return '—'
   return String(v).replace('T', ' ')
@@ -197,6 +165,7 @@ function resetFilters() {
 
 function openDetail(e) {
   currentExecId.value = e.id
+  currentTaskName.value = e.taskName || ''
   drawerVisible.value = true
   // 同步 URL query，支持刷新后重开
   router.replace({ query: { ...route.query, openExecId: e.id } })
@@ -231,18 +200,21 @@ async function doRerun(e) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 支持 query 参数进入
   if (route.query.status) fStatus.value = route.query.status
   if (route.query.triggerType) fTrigger.value = route.query.triggerType
   if (route.query.from && route.query.to) {
     dateRange.value = [route.query.from, route.query.to]
   }
-  loadList(1)
+  await loadList(1)
 
   // openExecId → 自动打开详情
   if (route.query.openExecId) {
     currentExecId.value = route.query.openExecId
+    // 尝试从当前列表中匹配 taskName（深链场景：若命中则标题直接显示）
+    const hit = list.value.find(x => String(x.id) === String(route.query.openExecId))
+    currentTaskName.value = hit ? hit.taskName || '' : ''
     drawerVisible.value = true
   }
 })

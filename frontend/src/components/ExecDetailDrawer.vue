@@ -9,7 +9,7 @@
     @close="emit('close')"
   >
     <template #header>
-      <span>执行详情 · <span class="mono">{{ execId }}</span></span>
+      <span>执行详情 · <span class="mono">{{ execId }}</span><span v-if="displayTaskName"> · {{ displayTaskName }}</span></span>
     </template>
 
     <div v-if="loading" class="hint">加载中…</div>
@@ -25,7 +25,7 @@
           </span>
         </div>
         <div class="dl">
-          <div class="it"><div class="k">任务</div><div class="v">{{ detail.exec.taskName || ('#' + detail.exec.taskId) }}</div></div>
+          <div class="it"><div class="k">任务</div><div class="v">{{ displayTaskName }}</div></div>
           <div class="it"><div class="k">任务版本</div><div class="v mono">v{{ detail.exec.taskVersionId || '—' }}</div></div>
           <div class="it"><div class="k">数据日期</div><div class="v">{{ detail.exec.bizDate || '—' }}</div></div>
           <div class="it"><div class="k">触发时间</div><div class="v">{{ formatDT(detail.exec.fireTime) }}</div></div>
@@ -168,10 +168,12 @@ import { ref, computed, watch } from 'vue'
 import { ElDrawer } from 'element-plus'
 import { get } from '../api/http.js'
 import { resolveError } from '../utils/errorDict.js'
+import { statusBadge, statusLabel, triggerLabel } from '../utils/execEnums.js'
 
 const props = defineProps({
   visible: Boolean,
-  execId: [String, Number]
+  execId: [String, Number],
+  taskName: { type: String, default: '' }
 })
 const emit = defineEmits(['close'])
 
@@ -181,6 +183,11 @@ const expandedArtifacts = ref({})
 let requestSeq = 0
 
 const drawerTitle = computed(() => props.execId || '')
+
+// 任务名优先级：props.taskName（列表传入）> detail.exec.taskName（未来后端可能补）> #id 兜底
+const displayTaskName = computed(() => {
+  return props.taskName || detail.value?.exec?.taskName || ('#' + (props.execId || ''))
+})
 
 const errInfo = computed(() => {
   if (!detail.value?.exec?.errorCode) return null
@@ -220,39 +227,6 @@ function toggleArtifact(i) {
   }
 }
 
-function statusBadge(s) {
-  if (!s) return 'b-gray'
-  switch (s) {
-    case 'SUCCESS': return 'b-ok'
-    case 'PARTIAL_SUCCESS': return 'b-part'
-    case 'FAILED':
-    case 'TIMEOUT': return 'b-fail'
-    case 'RUNNING':
-    case 'PENDING': return 'b-run'
-    case 'RETRY_WAIT': return 'b-warn'
-    case 'CANCELLED': return 'b-gray'
-    default: return 'b-gray'
-  }
-}
-function statusLabel(s) {
-  if (!s) return '—'
-  const map = {
-    SUCCESS: '成功',
-    PARTIAL_SUCCESS: '部分成功',
-    FAILED: '失败',
-    TIMEOUT: '超时',
-    RUNNING: '执行中',
-    PENDING: '排队中',
-    RETRY_WAIT: '等待重试',
-    CANCELLED: '已取消'
-  }
-  return map[s] || s
-}
-function triggerLabel(t) {
-  if (!t) return '—'
-  const map = { CRON: '定时', MANUAL: '手动', TEST: '测试', TRIAL: '试运行', API: 'API' }
-  return map[t] || t
-}
 function formatDT(v) {
   if (!v) return '—'
   // 后端返回 LocalDateTime 序列化为 "2026-09-21T09:00:00" 或类似
