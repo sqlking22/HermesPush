@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hermes.push.exec.ExecArtifactMapper">
+
+  <insert id="upsertInline">
+    INSERT INTO hp_task_exec_artifact(exec_id, artifact_key, type, content, rows_count, bytes, cost_ms)
+    VALUES (#{execId}, #{artifactKey}, #{type}, #{content}, #{rowsCount}, #{bytes}, #{costMs})
+    ON DUPLICATE KEY UPDATE
+      type = VALUES(type),
+      content = VALUES(content),
+      rows_count = VALUES(rows_count),
+      bytes = VALUES(bytes),
+      cost_ms = VALUES(cost_ms),
+      error_code = NULL,
+      error_msg = NULL
+  </insert>
+
+  <insert id="upsertError">
+    INSERT INTO hp_task_exec_artifact(exec_id, artifact_key, type, error_code, error_msg)
+    VALUES (#{execId}, #{artifactKey}, #{type}, #{errorCode}, #{errorMsg})
+    ON DUPLICATE KEY UPDATE
+      type = VALUES(type),
+      error_code = VALUES(error_code),
+      error_msg = VALUES(error_msg)
+  </insert>
+
+</mapper>

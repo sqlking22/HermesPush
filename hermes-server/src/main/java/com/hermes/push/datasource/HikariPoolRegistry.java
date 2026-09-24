@@ -27,6 +27,14 @@ public class HikariPoolRegistry {
     }
   }
 
+  /** 清空所有连接池（测试用） */
+  public void clearAll() {
+    pools.values().forEach(pool -> {
+      try { pool.close(); } catch (Exception ignored) {}
+    });
+    pools.clear();
+  }
+
   private HikariDataSource createPool(Datasource ds) {
     HikariConfig cfg = new HikariConfig();
     cfg.setJdbcUrl(ds.getJdbcUrl());
