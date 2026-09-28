@@ -2918,11 +2918,11 @@ services:
 - 观测 SQL：`SELECT MAX(TIMESTAMPDIFF(SECOND, fire_time, updated_at)) FROM hp_task_exec WHERE ...`（完成 P95/P100）
 - 将实测数字与推算模型（50 任务 × 平均查询 2s + 渲染 0.2s + 推送 0.5s / 8 并发 ≈ 17s，无渲染重负载）写入 `docs/m1-acceptance.md` 的压测小节，并给出 M3 转图交付后的复测计划
 
-- [ ] **Step 1: 编写 compose/Dockerfile/验收文档/压测脚本**（compose/Dockerfile 为服务器部署交付物；开发机无 Docker 时仅做 YAML 静态检查，无法本机验证的项在验收记录中标注"待服务器环境验证"）
-- [ ] **Step 2: 本地模式执行 E2E 步骤 1-9 并把结果记入 docs/m1-acceptance.md**
-- [ ] **Step 3: 执行压测建模，记录数字**
-- [ ] **Step 4: 全量回归** `.\mvnw.cmd test`（所有任务测试一次跑通）
-- [ ] **Step 5: Commit** `git add deploy docs scripts; git commit -m "test(m1): docker-compose部署+E2E验收记录+峰值压测建模报告"`
+- [x] **Step 1: 编写 compose/Dockerfile/验收文档/压测脚本**（compose/Dockerfile 为服务器部署交付物；开发机无 Docker 时仅做 YAML 静态检查，无法本机验证的项在验收记录中标注"待服务器环境验证"）
+- [x] **Step 2: 本地模式执行 E2E 步骤 1-9 并把结果记入 docs/m1-acceptance.md**
+- [x] **Step 3: 执行压测建模，记录数字**
+- [x] **Step 4: 全量回归** `.\mvnw.cmd test`（所有任务测试一次跑通）
+- [x] **Step 5: Commit** `git add deploy docs scripts; git commit -m "test(m1): docker-compose部署+E2E验收记录+峰值压测建模报告"`
 
 ---
 
