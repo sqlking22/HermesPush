@@ -25,7 +25,11 @@ public enum ErrorCode {
   SYS_005("SYS-005","渲染超时","简化模板或调大超时"),
   SYS_006("SYS-006","请求参数校验失败","按提示填写后重试"),
   AUTH_001("AUTH-001","用户名或密码错误","请重新输入，连续失败将锁定账户(M4a)"),
-  AUTH_002("AUTH-002","未登录或会话已过期","请重新登录");
+  AUTH_002("AUTH-002","未登录或会话已过期","请重新登录"),
+  STO_001("STO-001","存储后端不存在或未启用","检查存储配置"),
+  STO_002("STO-002","文件读写失败","检查存储后端可用性与权限"),
+  STO_003("STO-003","路径非法","检查路径是否含非法字符或穿越"),
+  STO_004("STO-004","存储键已存在","换一个存储键");
 
   private final String code, userMessage, suggestion;
   ErrorCode(String code, String userMessage, String suggestion) {
