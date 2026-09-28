@@ -17,7 +17,7 @@
 - 实体用 Lombok `@Data` + `@TableName` + `@TableId(type = IdType.AUTO)`；`created_at` 用 `@TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)`；Mapper 用 `@Mapper interface X extends BaseMapper<T>`。
 - Service 用构造器注入（无 `@Autowired`），`@Service`；DB 写操作用 `@Transactional`。
 - 包名统一 `com.hermes.push.storage.*`；本子项目**不做 REST Controller / 界面**（存储管理页随后续子项目）。
-- 测试类放 `hermes-server/src/test/java/com/hermes/push/storage/`；纯单测用 JUnit5+Mockito，涉及 DB/加密/Spring 的用 `@SpringBootTest`（连 `hermes_test`，Flyway 自动建表）。
+- 测试类放 `hermes-server/src/test/java/com/hermes/push/storage/`；纯单测用 JUnit5+Mockito；涉及 DB/加密/Spring 的测试**须 `extends com.hermes.push.AbstractIntegrationTest`**（基类已带 `@SpringBootTest`+`@ActiveProfiles("test")`，并 `@BeforeEach` 做 `flyway.clean()+migrate()` 用例级隔离）——不要裸写 `@SpringBootTest`，否则连不到 `hermes_test`。
 - S3 集成：本机无 Docker，S3 后端单测用 **Mockito mock `S3Client`/`S3Presigner`**（验证接线与 SDK 调用参数）；真实 S3 往返留给有 OSS/MinIO 的环境补做集成验证。
 
 ---
