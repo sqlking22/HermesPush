@@ -1,0 +1,21 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: hermes, TZ: Asia/Shanghai }
+    ports: ["3306:3306"]
+    healthcheck: { test: ["CMD", "mysqladmin", "ping", "-proot"], interval: 5s, retries: 20 }
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  hermes:
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    environment:
+      HP_DB_HOST: mysql
+      HP_REDIS_HOST: redis
+      HP_MASTER_KEY: ${HP_MASTER_KEY}
+      HP_ADMIN_PASSWORD: ${HP_ADMIN_PASSWORD}
+    ports: ["8080:8080"]
+    shm_size: "1gb"          # M3 Chromium 预留，M1 无害
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_started }
