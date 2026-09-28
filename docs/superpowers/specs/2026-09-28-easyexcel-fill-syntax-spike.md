@@ -4,6 +4,8 @@
 - **里程碑**：M2 前置 spike（FR-RD-03 占位符语法冻结前提，评审 H10「M2 前 spike 验证后冻结并出模板编写指南」）
 - **状态**：方案已评审通过，用户确认开工
 
+> **库选型更新（2026-09-28 调研）**：`com.alibaba:easyexcel` 已于 2025-09 被归档（最后版本 4.0.3，不跟进 JDK 21/POI 5.x）。本 spike 改以前作者的后继 **FastExcel**（`cn.idev.excel:fastexcel`，API 与 EasyExcel 兼容）执行；远期路径为 Apache Fesod（incubating）。占位符语法冻结结论与库选择解耦（两库填充语法一致）。
+
 ## 一、目标
 
 在正式实现 FR-RD-03 Excel 渲染前，用最小可运行代码验证 EasyExcel 模板填充的占位符语法与分批填充性能，产出三件物：
@@ -28,7 +30,7 @@ PRD FR-RD-03 与设计 spec RD-3 各有草案。经核实，EasyExcel 实际支�
 
 | # | 验证项 | 冻结结论 |
 |---|---|---|
-| 0 | 库版本：pin EasyExcel 版本、JDK 21 兼容、FastExcel fork 状况 | 定版本 |
+| 0 | 库选型：确认 FastExcel 坐标与版本、JDK 21 兼容；核对 Apache Fesod 作为远期路径 | 定坐标与版本 |
 | 1 | 单列表 `{.字段}` 填充 | 定写法 |
 | 2 | 多列表同 sheet `{别名.字段}` + `FillWrapper` + `forceNewRow` | 行→支持；不行→冻结「一 sheet 一列表」 |
 | 3 | 单值 `{数据集.字段}` 填充前替换，验证与 #2 不冲突 | 定单值写法 |
