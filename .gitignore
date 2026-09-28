@@ -8,3 +8,6 @@ dist/
 .DS_Store
 .idea/
 *.iml
+# Aspose 授权/库为本地离线研究用途,不入版本库
+docs/aspose-cells-*.jar
+docs/license.xml
