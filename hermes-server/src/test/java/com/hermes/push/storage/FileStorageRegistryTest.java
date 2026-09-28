@@ -32,4 +32,11 @@ class FileStorageRegistryTest extends AbstractIntegrationTest {
         BizException e = assertThrows(BizException.class, () -> registry.resolveByKey("no-such-key"));
         assertEquals(ErrorCode.STO_001, e.getErrorCode());
     }
+
+    @Test
+    void s3MissingConfigThrowsSto001() {
+        svc.save("s3-bad", "坏S3", "S3", null, null, null, null, null, null, true, "admin");
+        BizException e = assertThrows(BizException.class, () -> registry.resolveByKey("s3-bad"));
+        assertEquals(ErrorCode.STO_001, e.getErrorCode());
+    }
 }

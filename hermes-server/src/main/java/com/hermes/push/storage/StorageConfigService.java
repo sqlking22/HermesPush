@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.hermes.push.common.BizException;
 import com.hermes.push.common.ErrorCode;
 import com.hermes.push.security.AesGcmCipher;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,10 +15,13 @@ import java.util.List;
 public class StorageConfigService {
     private final StorageMapper mapper;
     private final AesGcmCipher cipher;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public StorageConfigService(StorageMapper mapper, AesGcmCipher cipher) {
+    public StorageConfigService(StorageMapper mapper, AesGcmCipher cipher,
+            ApplicationEventPublisher eventPublisher) {
         this.mapper = mapper;
         this.cipher = cipher;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -45,12 +49,14 @@ public class StorageConfigService {
         apply(s, displayName, type, endpoint, region, bucket, prefix, accessKey, secretKey, enabled);
         s.setEnabled(enabled ? 1 : 0);
         mapper.updateById(s);
+        eventPublisher.publishEvent(new StorageConfigChangedEvent(s.getStorageKey()));
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id);
+        Storage s = require(id);
         mapper.deleteById(id);
+        eventPublisher.publishEvent(new StorageConfigChangedEvent(s.getStorageKey()));
     }
 
     public List<StorageVO> list() {
@@ -68,9 +74,14 @@ public class StorageConfigService {
         if (s == null || (s.getEnabled() != null && s.getEnabled() == 0)) {
             throw new BizException(ErrorCode.STO_001, "存储后端不存在或未启用: " + storageKey);
         }
+        StorageType type;
+        try {
+            type = StorageType.valueOf(s.getStorageType());
+        } catch (IllegalArgumentException e) {
+            throw new BizException(ErrorCode.STO_001, "未知存储类型: " + s.getStorageType());
+        }
         return new DecryptedStorage(
-            s.getId(), s.getStorageKey(), s.getDisplayName(),
-            StorageType.valueOf(s.getStorageType()),
+            s.getId(), s.getStorageKey(), s.getDisplayName(), type,
             s.getEndpoint(), s.getRegion(), s.getBucket(), s.getPrefix(),
             decrypt(s.getAccessKeyEnc()), decrypt(s.getSecretKeyEnc()));
     }

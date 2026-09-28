@@ -23,10 +23,10 @@ public final class LogicalUri {
     }
 
     public static LogicalUri parse(String uri) {
-        if (uri == null || !uri.startsWith("hp://")) {
+        if (uri == null || !uri.startsWith(SCHEME + "://")) {
             throw new BizException(ErrorCode.STO_003, "非法 URI: " + uri);
         }
-        String rest = uri.substring("hp://".length());
+        String rest = uri.substring((SCHEME + "://").length());
         int slash = rest.indexOf('/');
         if (slash <= 0 || slash == rest.length() - 1) {
             throw new BizException(ErrorCode.STO_003, "非法 URI: " + uri);
@@ -60,5 +60,5 @@ public final class LogicalUri {
 
     public String storageKey() { return storageKey; }
     public String path() { return path; }
-    @Override public String toString() { return "hp://" + storageKey + "/" + path; }
+    @Override public String toString() { return SCHEME + "://" + storageKey + "/" + path; }
 }

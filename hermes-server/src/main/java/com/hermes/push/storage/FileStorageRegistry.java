@@ -1,8 +1,11 @@
 package com.hermes.push.storage;
 
+import com.hermes.push.common.BizException;
+import com.hermes.push.common.ErrorCode;
 import com.hermes.push.storage.local.LocalFileStorage;
 import com.hermes.push.storage.s3.S3FileStorage;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -36,11 +39,21 @@ public class FileStorageRegistry {
         return cache.computeIfAbsent(storageKey, this::build);
     }
 
+    @EventListener
+    public void onConfigChanged(StorageConfigChangedEvent e) {
+        cache.remove(e.storageKey());
+    }
+
     private FileStorage build(String storageKey) {
         DecryptedStorage c = configService.requireDecrypted(storageKey);
         return switch (c.type()) {
             case LOCAL -> new LocalFileStorage(c.storageKey(), localRoot, c.prefix());
             case S3 -> {
+                if (isBlank(c.endpoint()) || isBlank(c.bucket())
+                    || isBlank(c.accessKey()) || isBlank(c.secretKey())) {
+                    throw new BizException(ErrorCode.STO_001,
+                        "S3 配置缺少必填字段 (endpoint/bucket/accessKey/secretKey): " + storageKey);
+                }
                 String region = c.region() == null ? "us-east-1" : c.region();
                 StaticCredentialsProvider creds = StaticCredentialsProvider.create(
                     AwsBasicCredentials.create(c.accessKey(), c.secretKey()));
@@ -57,5 +70,9 @@ public class FileStorageRegistry {
                 yield new S3FileStorage(c.storageKey(), client, presigner, c.bucket(), c.prefix());
             }
         };
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 }

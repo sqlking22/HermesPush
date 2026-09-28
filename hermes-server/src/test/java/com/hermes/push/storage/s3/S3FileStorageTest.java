@@ -56,8 +56,18 @@ class S3FileStorageTest {
 
     @Test
     void deleteCallsDeleteObject() {
+        when(client.headObject(any(HeadObjectRequest.class)))
+            .thenReturn(HeadObjectResponse.builder().build());
         assertTrue(storage().delete("hp://s3-main/x"));
         verify(client).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    void deleteReturnsFalseWhenMissing() {
+        when(client.headObject(any(HeadObjectRequest.class)))
+            .thenThrow(S3Exception.builder().statusCode(404).build());
+        assertFalse(storage().delete("hp://s3-main/missing"));
+        verify(client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
     @Test

@@ -68,6 +68,7 @@ public class LocalFileStorage implements FileStorage {
 
     @Override
     public Optional<String> presignedUrl(String uri, Duration ttl) {
+        LogicalUri.parse(uri); // 与其他方法一致：先校验 URI
         return Optional.empty();
     }
 

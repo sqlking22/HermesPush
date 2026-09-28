@@ -60,6 +60,7 @@ public class S3FileStorage implements FileStorage {
 
     @Override
     public boolean delete(String uri) {
+        if (!exists(uri)) return false;
         try {
             client.deleteObject(DeleteObjectRequest.builder()
                 .bucket(bucket).key(key(LogicalUri.parse(uri).path())).build());
