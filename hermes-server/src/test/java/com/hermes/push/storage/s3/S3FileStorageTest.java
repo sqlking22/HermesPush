@@ -7,8 +7,13 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.ByteArrayInputStream;
+import java.net.URL;
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -17,9 +22,10 @@ import static org.mockito.Mockito.*;
 
 class S3FileStorageTest {
     private final S3Client client = mock(S3Client.class);
+    private final S3Presigner presigner = mock(S3Presigner.class);
 
     private FileStorage storage() {
-        return new S3FileStorage("s3-main", client, "hermes", "prefix/");
+        return new S3FileStorage("s3-main", client, presigner, "hermes", "prefix/");
     }
 
     @Test
@@ -55,7 +61,12 @@ class S3FileStorageTest {
     }
 
     @Test
-    void presignedUrlNotYetImplemented() {
-        assertEquals(Optional.empty(), storage().presignedUrl("hp://s3-main/x", java.time.Duration.ofMinutes(5)));
+    void presignedUrlUsesPresigner() throws Exception {
+        PresignedGetObjectRequest pr = mock(PresignedGetObjectRequest.class);
+        when(presigner.presignGetObject(any(GetObjectPresignRequest.class))).thenReturn(pr);
+        when(pr.url()).thenReturn(new URL("https://example/x?sig=abc"));
+        Optional<String> url = storage().presignedUrl("hp://s3-main/artifacts/a.xlsx", Duration.ofMinutes(5));
+        assertTrue(url.isPresent());
+        assertTrue(url.get().contains("sig=abc"));
     }
 }

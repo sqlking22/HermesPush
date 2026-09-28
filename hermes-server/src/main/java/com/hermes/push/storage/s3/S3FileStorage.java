@@ -9,6 +9,8 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.InputStream;
 import java.time.Duration;
@@ -18,12 +20,15 @@ import java.util.Optional;
 public class S3FileStorage implements FileStorage {
     private final String storageKey;
     private final S3Client client;
+    private final S3Presigner presigner;
     private final String bucket;
     private final String prefix;
 
-    public S3FileStorage(String storageKey, S3Client client, String bucket, String prefix) {
+    public S3FileStorage(String storageKey, S3Client client, S3Presigner presigner,
+            String bucket, String prefix) {
         this.storageKey = storageKey;
         this.client = client;
+        this.presigner = presigner;
         this.bucket = bucket;
         this.prefix = (prefix == null || prefix.isBlank()) ? "" : prefix;
     }
@@ -78,7 +83,15 @@ public class S3FileStorage implements FileStorage {
 
     @Override
     public Optional<String> presignedUrl(String uri, Duration ttl) {
-        return Optional.empty(); // Task 8 实现
+        try {
+            GetObjectRequest req = GetObjectRequest.builder()
+                .bucket(bucket).key(key(LogicalUri.parse(uri).path())).build();
+            GetObjectPresignRequest pr = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl).getObjectRequest(req).build();
+            return Optional.of(presigner.presignGetObject(pr).url().toString());
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.STO_002, e);
+        }
     }
 
     private String key(String path) { return prefix + path; }
