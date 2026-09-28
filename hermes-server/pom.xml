@@ -129,6 +129,14 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <!-- 开发机内存有限(16G/页面文件常满),限制测试 JVM 堆避免 native OOM(errno 1455);需要更大堆时可用 -DargLine 覆盖 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Xmx2g</argLine>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
